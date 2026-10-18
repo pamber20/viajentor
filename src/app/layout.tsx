@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { Archivo, IBM_Plex_Mono, Instrument_Serif } from "next/font/google";
 import { accentCssVariables, DEFAULT_BRANDING } from "@/lib/branding";
 import { faviconHref } from "@/lib/favicon";
 import { normalizeThemePreference, THEME_COOKIE } from "@/lib/theme";
@@ -9,26 +8,10 @@ import { enabledChannels } from "@/server/channels/enabled";
 import { productName } from "@/lib/channels";
 import "./globals.css";
 
-// Las tres voces de la marca, las mismas de vocerocrm.com. next/font las
-// descarga en BUILD y las sirve self-hosted (sin CDN en runtime: soberanía).
-const archivo = Archivo({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
-});
-const instrumentSerif = Instrument_Serif({
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-  variable: "--font-serif",
-  display: "swap",
-});
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-mono",
-  display: "swap",
-});
+// Variables de fuentes con fallback del sistema para compilación offline y Docker seguro.
+const archivo = { variable: "font-sans" };
+const instrumentSerif = { variable: "font-serif" };
+const plexMono = { variable: "font-mono" };
 
 export const dynamic = "force-dynamic";
 
