@@ -35,6 +35,46 @@ import { SupplierCombobox } from "@/components/travel/suppliers/supplier-combobo
 import { useAirlines, CITY_AIRPORT_MAP } from "@/hooks/useAirlines";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
 
+
+const PREFERENCES = [
+  { id: "adultsOnly", label: "Solo Adultos" },
+  { id: "allInclusive", label: "Todo Incluido" },
+  { id: "beachfront", label: "Frente a Playa" },
+  { id: "directFlight", label: "Vuelo Directo" },
+  { id: "transportIncluded", label: "Transporte" },
+  { id: "toursIncluded", label: "Tours" },
+  { id: "travelInsurance", label: "Seguro" },
+  { id: "baggage", label: "Equipaje" },
+];
+
+const DESTINATION_TEMPLATES = [
+  { name: "Cancún", country: "México" },
+  { name: "Cartagena", country: "Colombia" },
+  { name: "Punta Cana", country: "Rep. Dominicana" },
+  { name: "Miami", country: "USA" },
+  { name: "Madrid", country: "España" },
+  { name: "París", country: "Francia" },
+  { name: "San Andrés", country: "Colombia" },
+  { name: "Santa Marta", country: "Colombia" },
+];
+
+const AIRPORT_SUGGESTIONS = [
+  { city: "Bogotá", region: "Colombia", airport: "El Dorado", code: "BOG" },
+  { city: "Medellín", region: "Colombia", airport: "José María Córdova", code: "MDE" },
+  { city: "Cali", region: "Colombia", airport: "Alfonso Bonilla Aragón", code: "CLO" },
+  { city: "Cartagena", region: "Colombia", airport: "Rafael Núñez", code: "CTG" },
+  { city: "Santa Marta", region: "Colombia", airport: "Simón Bolívar", code: "SMR" },
+  { city: "San Andrés", region: "Colombia", airport: "Gustavo Rojas Pinilla", code: "ADZ" },
+  { city: "Barranquilla", region: "Colombia", airport: "Ernesto Cortissoz", code: "BAQ" },
+  { city: "Pereira", region: "Colombia", airport: "Matecaña", code: "PEI" },
+  { city: "Cancún", region: "México", airport: "Cancún Intl", code: "CUN" },
+  { city: "Punta Cana", region: "Rep. Dominicana", airport: "Punta Cana Intl", code: "PUJ" },
+  { city: "Miami", region: "EE.UU.", airport: "Miami Intl", code: "MIA" },
+  { city: "Madrid", region: "España", airport: "Barajas", code: "MAD" },
+  { city: "París", region: "Francia", airport: "Charles de Gaulle", code: "CDG" },
+  { city: "Panamá", region: "Panamá", airport: "Tocumen", code: "PTY" },
+];
+
 const ITEM_TYPES: { type: TravelItemType; label: string; icon: typeof Plane }[] = [
   { type: "Hotel", label: "Alojamiento / Hotel", icon: Hotel },
   { type: "Flight", label: "Vuelo / Tiquete", icon: Plane },
@@ -123,6 +163,78 @@ export function QuoteBuilder({
   const [inclusions, setInclusions] = useState(initialQuote?.inclusions ?? "");
   const [exclusions, setExclusions] = useState(initialQuote?.exclusions ?? "");
   const [policies, setPolicies] = useState(initialQuote?.policies ?? "");
+
+
+  // Secciones colapsables estilo Viajentor
+  const [showClient, setShowClient] = useState(true);
+  const [showTrip, setShowTrip] = useState(true);
+  const [showPreferences, setShowPreferences] = useState(true);
+  const [showItinerary, setShowItinerary] = useState(true);
+  const [showInclusions, setShowInclusions] = useState(true);
+  const [showFinancial, setShowFinancial] = useState(true);
+
+  // Preferencias
+  const [preferences, setPreferences] = useState<Record<string, boolean>>(
+    initialQuote?.preferences ?? {}
+  );
+  const [flightType, setFlightType] = useState<"round-trip" | "one-way">(
+    initialQuote?.flightType ?? "round-trip"
+  );
+  const [departureAirport, setDepartureAirport] = useState(initialQuote?.departureAirport ?? "");
+  const [arrivalAirport, setArrivalAirport] = useState(initialQuote?.arrivalAirport ?? "");
+  const [rooms, setRooms] = useState<number>(initialQuote?.rooms ?? 1);
+  const [flexibility, setFlexibility] = useState(initialQuote?.flexibility ?? "No");
+  const [advisorName, setAdvisorName] = useState(initialQuote?.advisorName ?? "");
+
+  const [showOriginSuggs, setShowOriginSuggs] = useState(false);
+  const [showDestSuggs, setShowDestSuggs] = useState(false);
+
+  const allCollapsed = !showClient && !showTrip && !showPreferences && !showItinerary && !showInclusions && !showFinancial;
+
+  function toggleCollapseAll() {
+    const next = allCollapsed;
+    setShowClient(next);
+    setShowTrip(next);
+    setShowPreferences(next);
+    setShowItinerary(next);
+    setShowInclusions(next);
+    setShowFinancial(next);
+  }
+
+  function applyDestinationTemplate(tmplName: string) {
+    setDestination(tmplName);
+    const tmplMap: Record<string, { inc: string; exc: string; pol: string }> = {
+      "Cancún": {
+        inc: "• Vuelos ida y vuelta con equipaje\n• Hotel Todo Incluido 4-5 estrellas\n• Traslado aeropuerto - hotel - aeropuerto\n• Tarjeta de asistencia médica",
+        exc: "• Excursiones opcionales\n• Gastos personales y propinas\n• Impuestos locales de saneamiento ambiental",
+        pol: "Tarifa promocional sujeta a disponibilidad de cupos aéreos y hoteleros. Cancelaciones según políticas del operador."
+      },
+      "Cartagena": {
+        inc: "• Tiquetes aéreos ida y regreso\n• Alojamiento en hotel seleccionado con desayuno\n• Traslados aeropuerto - hotel - aeropuerto\n• Asistencia médica integral",
+        exc: "• Almuerzos y cenas no especificados\n• Propinas a maleteros y guías",
+        pol: "Tiquetes no reembolsables. Cambios de fecha sujetos a penalidad de aerolínea y diferencia tarifaria."
+      },
+      "Punta Cana": {
+        inc: "• Tiquetes aéreos internacionales\n• Resort Todo Incluido 24 horas\n• Traslados en destino compartidos\n• Seguro de viaje con cobertura COVID",
+        exc: "• Tarjeta de turista / impuestos de entrada si aplican\n• Servicios de spa y compras personales",
+        pol: "Requiere pasaporte vigente mínimo 6 meses antes de la fecha del viaje."
+      },
+      "San Andrés": {
+        inc: "• Tiquetes aéreos\n• Alojamiento plan Full o Desayuno\n• Vuelta a la isla en chiva o van\n• Tarjeta de asistencia médica",
+        exc: "• Tarjeta de turismo OCCRE de entrada a la isla\n• Deportes náuticos y tours no incluidos",
+        pol: "Vuelo chárter / regular no reembolsable. Verifique pago de tarjeta OCCRE en sala de abordaje."
+      }
+    };
+    if (tmplMap[tmplName]) {
+      setInclusions(tmplMap[tmplName].inc);
+      setExclusions(tmplMap[tmplName].exc);
+      setPolicies(tmplMap[tmplName].pol);
+    }
+  }
+
+  function togglePref(id: string) {
+    setPreferences((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
 
   // UI state
   const [loadingAi, setLoadingAi] = useState(false);
@@ -530,6 +642,15 @@ export function QuoteBuilder({
               type="button"
               size="sm"
               variant="outline"
+              onClick={toggleCollapseAll}
+              className="text-xs text-text-2 border-border hover:bg-muted"
+            >
+              {allCollapsed ? "Expandir Todo" : "Colapsar Todo"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
               disabled={loadingAi}
               onClick={handleAiSuggest}
               className="text-xs bg-brand-soft text-brand-text border-brand/20 hover:bg-brand-soft/80"
@@ -554,140 +675,423 @@ export function QuoteBuilder({
             </div>
           )}
 
-          {/* 1. Client & Destination Header */}
-          <div className="rounded-xl border bg-muted/10 p-4 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-text-3">
-              1. Datos del Cliente y Destino
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Cliente / Titular</label>
-                <Input
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  placeholder="Nombre y apellidos"
-                  required
-                />
+          {/* Paso 1: Información del Cliente */}
+          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowClient(!showClient)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-muted/40 transition"
+            >
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-brand-soft p-2 text-brand-text">
+                  <Users className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-widest text-brand">Paso 1 · Cliente</span>
+                  <span className="block font-bold text-sm text-foreground">Información del Cliente y Asesor</span>
+                </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Ciudad Origen</label>
-                <Input
-                  value={originCity}
-                  onChange={(e) => setOriginCity(e.target.value)}
-                  placeholder="Bogotá, Medellín..."
-                />
+              <div className="rounded-full p-1 text-text-3">
+                {showClient ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Teléfono / WhatsApp</label>
-                <Input
-                  value={clientPhone}
-                  onChange={(e) => setClientPhone(e.target.value)}
-                  placeholder="+57 300 000 0000"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Correo electrónico</label>
-                <Input
-                  type="email"
-                  value={clientEmail}
-                  onChange={(e) => setClientEmail(e.target.value)}
-                  placeholder="cliente@correo.com"
-                />
-              </div>
-            </div>
+            </button>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-              <div className="space-y-1 col-span-2 sm:col-span-1">
-                <label className="text-xs font-semibold text-text-2">Destino</label>
-                <Input
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
-                  placeholder="Cancún, Madrid, San Andrés..."
-                  required
-                />
+            {showClient && (
+              <div className="p-4 border-t bg-muted/10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                <div className="space-y-1 sm:col-span-2 md:col-span-1">
+                  <label className="text-xs font-semibold text-text-2">Nombre Completo *</label>
+                  <Input
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    placeholder="María García López"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Teléfono / WhatsApp</label>
+                  <Input
+                    value={clientPhone}
+                    onChange={(e) => setClientPhone(e.target.value)}
+                    placeholder="+57 300 000 0000"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Correo Electrónico</label>
+                  <Input
+                    type="email"
+                    value={clientEmail}
+                    onChange={(e) => setClientEmail(e.target.value)}
+                    placeholder="cliente@correo.com"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Ciudad de Origen</label>
+                  <Input
+                    value={originCity}
+                    onChange={(e) => {
+                      const c = e.target.value;
+                      setOriginCity(c);
+                      const mapped = CITY_AIRPORT_MAP[c.toLowerCase().trim()];
+                      if (mapped && !departureAirport) setDepartureAirport(mapped);
+                    }}
+                    placeholder="Bogotá, Medellín..."
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Motivo del Viaje</label>
+                  <Input
+                    value={travelReason}
+                    onChange={(e) => setTravelReason(e.target.value)}
+                    placeholder="Luna de miel, Familiar, Negocios..."
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Asesor Responsable</label>
+                  <Input
+                    value={advisorName}
+                    onChange={(e) => setAdvisorName(e.target.value)}
+                    placeholder="Nombre del asesor"
+                  />
+                </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Fecha Inicio</label>
-                <Input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Fecha Fin</label>
-                <Input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Noches</label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={nights}
-                  onChange={(e) => setNights(Number(e.target.value))}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Adultos</label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={passengers}
-                  onChange={(e) => setPassengers(Number(e.target.value))}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Niños</label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={childPassengers}
-                  onChange={(e) => setChildPassengers(Number(e.target.value))}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Moneda</label>
-                <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value as TravelCurrency)}
-                  className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm"
-                >
-                  <option value="COP">COP ($ Pesos)</option>
-                  <option value="USD">USD ($ Dólares)</option>
-                  <option value="EUR">EUR (€ Euros)</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Motivo</label>
-                <Input
-                  value={travelReason}
-                  onChange={(e) => setTravelReason(e.target.value)}
-                  placeholder="Vacaciones, Luna de Miel..."
-                />
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* 2. Day-by-Day Itinerary Builder */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-text-3">
-                2. Servicios del Itinerario ({days.length} Días)
-              </h3>
-              <Button type="button" size="sm" variant="outline" onClick={addDay}>
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
+          {/* Paso 2: Destinos, Aeropuertos y Fechas */}
+          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowTrip(!showTrip)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-muted/40 transition"
+            >
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-brand-soft p-2 text-brand-text">
+                  <Plane className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-widest text-brand">Paso 2 · Destinos y Fechas</span>
+                  <span className="block font-bold text-sm text-foreground">Detalles del Destino y Vuelos</span>
+                </div>
+              </div>
+              <div className="rounded-full p-1 text-text-3">
+                {showTrip ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </div>
+            </button>
+
+            {showTrip && (
+              <div className="p-4 border-t bg-muted/10 space-y-4">
+                {/* Destinos Populares con Plantilla Automática */}
+                <div>
+                  <label className="block text-xs font-semibold text-text-3 uppercase tracking-wider mb-2">
+                    Destinos Populares (Cargar Plantilla Rápida)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DESTINATION_TEMPLATES.map((tmpl) => (
+                      <button
+                        key={tmpl.name}
+                        type="button"
+                        onClick={() => applyDestinationTemplate(tmpl.name)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold border transition ${
+                          destination.toLowerCase() === tmpl.name.toLowerCase()
+                            ? "bg-brand text-brand-fg border-brand"
+                            : "bg-card text-text-2 hover:bg-muted border-border"
+                        }`}
+                      >
+                        {tmpl.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tipo de Vuelo */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFlightType("round-trip")}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                      flightType === "round-trip"
+                        ? "bg-foreground text-background"
+                        : "bg-muted text-text-2 hover:bg-muted/80"
+                    }`}
+                  >
+                    Ida y Regreso
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFlightType("one-way");
+                      setEndDate("");
+                    }}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                      flightType === "one-way"
+                        ? "bg-foreground text-background"
+                        : "bg-muted text-text-2 hover:bg-muted/80"
+                    }`}
+                  >
+                    Solo Ida
+                  </button>
+                </div>
+
+                {/* Origen y Destino con Sugerencias */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Origen */}
+                  <div className="relative space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Ciudad o Aeropuerto de Origen</label>
+                    <Input
+                      value={originCity}
+                      onChange={(e) => setOriginCity(e.target.value)}
+                      onFocus={() => setShowOriginSuggs(true)}
+                      placeholder="Ej. Bogotá (BOG)"
+                    />
+                    {showOriginSuggs && (
+                      <div className="absolute top-full left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg">
+                        <div className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-text-3 border-b">
+                          <span>Sugerencias de Aeropuertos</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowOriginSuggs(false)}
+                            className="text-text-3 hover:text-foreground"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {AIRPORT_SUGGESTIONS.map((a) => (
+                          <button
+                            key={a.code + a.city}
+                            type="button"
+                            onClick={() => {
+                              setOriginCity(a.city);
+                              setDepartureAirport(`${a.airport} (${a.code})`);
+                              setShowOriginSuggs(false);
+                            }}
+                            className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs hover:bg-muted rounded transition"
+                          >
+                            <span className="font-semibold text-foreground">{a.city}</span>
+                            <span className="text-[11px] font-mono text-text-3">{a.airport} ({a.code})</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Destino */}
+                  <div className="relative space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Ciudad o Destino Turístico *</label>
+                    <Input
+                      value={destination}
+                      onChange={(e) => setDestination(e.target.value)}
+                      onFocus={() => setShowDestSuggs(true)}
+                      placeholder="Ej. Cancún, Madrid..."
+                      required
+                    />
+                    {showDestSuggs && (
+                      <div className="absolute top-full left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg">
+                        <div className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-text-3 border-b">
+                          <span>Destinos y Aeropuertos</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowDestSuggs(false)}
+                            className="text-text-3 hover:text-foreground"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {AIRPORT_SUGGESTIONS.map((a) => (
+                          <button
+                            key={a.code + a.city + "dest"}
+                            type="button"
+                            onClick={() => {
+                              applyDestinationTemplate(a.city);
+                              setArrivalAirport(`${a.airport} (${a.code})`);
+                              setShowDestSuggs(false);
+                            }}
+                            className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs hover:bg-muted rounded transition"
+                          >
+                            <span className="font-semibold text-foreground">{a.city}</span>
+                            <span className="text-[11px] font-mono text-text-3">{a.airport} ({a.code})</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fechas, Noches, Pasajeros y Habitaciones */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Fecha Ida *</label>
+                    <Input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => {
+                        const s = e.target.value;
+                        setStartDate(s);
+                        if (endDate && s) {
+                          const diff = Math.ceil((new Date(endDate).getTime() - new Date(s).getTime()) / (1000 * 3600 * 24));
+                          if (diff > 0) setNights(diff);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={`text-xs font-semibold text-text-2 ${flightType === "one-way" ? "opacity-50" : ""}`}>Fecha Vuelta</label>
+                    <Input
+                      type="date"
+                      value={flightType === "one-way" ? "" : endDate}
+                      disabled={flightType === "one-way"}
+                      min={startDate}
+                      onChange={(e) => {
+                        const ed = e.target.value;
+                        setEndDate(ed);
+                        if (startDate && ed) {
+                          const diff = Math.ceil((new Date(ed).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24));
+                          if (diff > 0) setNights(diff);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Noches de Estadía</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={nights}
+                      onChange={(e) => setNights(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Flexibilidad</label>
+                    <select
+                      value={flexibility}
+                      onChange={(e) => setFlexibility(e.target.value)}
+                      className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-xs font-medium"
+                    >
+                      <option value="No">Sin flexibilidad</option>
+                      <option value="+/- 1 día">+/- 1 día</option>
+                      <option value="+/- 3 días">+/- 3 días</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Adultos (12+ años) *</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={passengers}
+                      onChange={(e) => setPassengers(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Menores / Niños</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={childPassengers}
+                      onChange={(e) => setChildPassengers(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Habitaciones</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={rooms}
+                      onChange={(e) => setRooms(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Moneda del Plan</label>
+                    <select
+                      value={currency}
+                      onChange={(e) => setCurrency(e.target.value as TravelCurrency)}
+                      className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-xs font-medium"
+                    >
+                      <option value="COP">COP ($ Pesos)</option>
+                      <option value="USD">USD ($ Dólares)</option>
+                      <option value="EUR">EUR (€ Euros)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Paso 3: Preferencias del Viaje */}
+          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowPreferences(!showPreferences)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-muted/40 transition"
+            >
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-brand-soft p-2 text-brand-text">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-widest text-brand">Paso 3 · Preferencias</span>
+                  <span className="block font-bold text-sm text-foreground">Etiquetas y Preferencias de Viaje</span>
+                </div>
+              </div>
+              <div className="rounded-full p-1 text-text-3">
+                {showPreferences ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </div>
+            </button>
+
+            {showPreferences && (
+              <div className="p-4 border-t bg-muted/10">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {PREFERENCES.map((pref) => {
+                    const isChecked = !!preferences[pref.id];
+                    return (
+                      <button
+                        key={pref.id}
+                        type="button"
+                        onClick={() => togglePref(pref.id)}
+                        className={`flex items-center justify-center rounded-full py-2 px-3 text-xs font-bold border transition ${
+                          isChecked
+                            ? "bg-foreground text-background border-foreground shadow-xs"
+                            : "bg-card text-text-2 border-border hover:bg-muted"
+                        }`}
+                      >
+                        {pref.label} {isChecked && " ✓"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Paso 4: Servicios del Itinerario */}
+          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+            <div className="px-4 py-3 flex items-center justify-between border-b bg-muted/20">
+              <button
+                type="button"
+                onClick={() => setShowItinerary(!showItinerary)}
+                className="flex items-center gap-3 text-left hover:opacity-80 transition"
+              >
+                <div className="rounded-lg bg-brand-soft p-2 text-brand-text">
+                  <Hotel className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-widest text-brand">Paso 4 · Itinerario</span>
+                  <span className="block font-bold text-sm text-foreground">Servicios Día por Día ({days.length} Días)</span>
+                </div>
+                <div className="rounded-full p-1 text-text-3 ml-2">
+                  {showItinerary ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </div>
+              </button>
+
+              <Button type="button" size="sm" variant="outline" onClick={addDay} className="h-8 text-xs font-semibold">
+                <Plus className="mr-1 h-3.5 w-3.5" />
                 Agregar Día {days.length + 1}
               </Button>
             </div>
 
-            <div className="space-y-4">
+            {showItinerary && (
+              <div className="p-4 space-y-4 bg-muted/10">
               {days.map((day) => (
                 <div key={day.id} className="rounded-xl border bg-card p-4 space-y-3 shadow-xs">
                   <div className="flex items-center justify-between border-b pb-2">
@@ -1789,14 +2193,33 @@ export function QuoteBuilder({
                   )}
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
 
-          {/* 3. Margins, Taxes & Financial Summary */}
-          <div className="rounded-xl border bg-muted/20 p-4 space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-text-3">
-              3. Configuración Financiera y Plan de Pagos
-            </h3>
+          {/* Paso 5: Configuración Financiera y Plan de Pagos */}
+          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowFinancial(!showFinancial)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-muted/40 transition border-b"
+            >
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-brand-soft p-2 text-brand-text">
+                  <DollarSign className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-widest text-brand">Paso 5 · Finanzas</span>
+                  <span className="block font-bold text-sm text-foreground">Tarifas, Márgenes y Plan de Amortización</span>
+                </div>
+              </div>
+              <div className="rounded-full p-1 text-text-3">
+                {showFinancial ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </div>
+            </button>
+
+            {showFinancial && (
+              <div className="p-4 space-y-4 bg-muted/10">
 
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               <div className="space-y-1">
@@ -1936,10 +2359,33 @@ export function QuoteBuilder({
                 </div>
               )}
             </div>
+              </div>
+            )}
           </div>
 
-          {/* 4. Inclusions & Policies */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Paso 6: Inclusiones, Exclusiones y Políticas */}
+          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowInclusions(!showInclusions)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-muted/40 transition border-b"
+            >
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-brand-soft p-2 text-brand-text">
+                  <Shield className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-widest text-brand">Paso 6 · Cláusulas</span>
+                  <span className="block font-bold text-sm text-foreground">Inclusiones, Exclusiones y Políticas del Viaje</span>
+                </div>
+              </div>
+              <div className="rounded-full p-1 text-text-3">
+                {showInclusions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </div>
+            </button>
+
+            {showInclusions && (
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 bg-muted/10">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-text-2">Inclusiones</label>
               <Textarea
@@ -1967,6 +2413,8 @@ export function QuoteBuilder({
                 placeholder="Tarifas sujetas a cambio sin previo aviso hasta emitir el depósito..."
               />
             </div>
+              </div>
+            )}
           </div>
 
           {/* Form Actions */}
