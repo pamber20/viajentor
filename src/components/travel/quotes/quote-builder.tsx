@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
+  ArrowLeftRight,
   ChevronDown,
   ChevronUp,
   DollarSign,
@@ -142,6 +143,9 @@ export function QuoteBuilder({
   const [minimumDeposit, setMinimumDeposit] = useState<number>(
     initialQuote?.minimumDeposit ?? 0
   );
+  const [freelanceCommission, setFreelanceCommission] = useState<number>(
+    initialQuote?.freelanceCommission ?? 0
+  );
 
   // Itinerary Days
   const [days, setDays] = useState<TravelDay[]>(
@@ -252,30 +256,130 @@ export function QuoteBuilder({
     : "";
   const airlineSuggestions = searchAirlines(currentItemAirline);
 
-  // Recalculate totals when passenger count changes for per-person items
+  function handleSwapLocations() {
+    const tempCity = originCity;
+    const tempDest = destination;
+    const tempDepAir = departureAirport;
+    const tempArrAir = arrivalAirport;
+
+    setOriginCity(tempDest);
+    setDestination(tempCity);
+    setDepartureAirport(tempArrAir);
+    setArrivalAirport(tempDepAir);
+  }
+
+  function handleStartDateChange(val: string) {
+    setStartDate(val);
+    if (!val) return;
+    let newEndDate = endDate;
+    if (flightType !== "one-way") {
+      if (!endDate || endDate < val) {
+        newEndDate = val;
+        setEndDate(val);
+      }
+      const s = new Date(val);
+      const e = new Date(newEndDate);
+      const diff = Math.ceil((e.getTime() - s.getTime()) / (1000 * 3600 * 24));
+      setNights(diff > 0 ? diff : 1);
+    }
+  }
+
+  function handleEndDateChange(val: string) {
+    setEndDate(val);
+    if (startDate && val) {
+      const s = new Date(startDate);
+      const e = new Date(val);
+      const diff = Math.ceil((e.getTime() - s.getTime()) / (1000 * 3600 * 24));
+      setNights(diff > 0 ? diff : 1);
+    }
+  }
+
+  function handleNightsChange(num: number) {
+    setNights(num);
+    if (startDate && num > 0 && flightType !== "one-way") {
+      const s = new Date(startDate);
+      s.setDate(s.getDate() + num);
+      const yyyy = s.getFullYear();
+      const mm = String(s.getMonth() + 1).padStart(2, "0");
+      const dd = String(s.getDate()).padStart(2, "0");
+      setEndDate(`${yyyy}-${mm}-${dd}`);
+    }
+  }
+
+  function handleNightsBlur() {
+    if (nights < 1) {
+      handleNightsChange(1);
+    }
+  }
+
+  function handlePassengersBlur() {
+    if (passengers < 1) {
+      setPassengers(1);
+    }
+  }
+
+  // Recalcular y sincronizar reactivamente los ítems cuando cambia el número de pasajeros
   useEffect(() => {
-    setDays((prevDays) =>
-      prevDays.map((d) => ({
-        ...d,
-        items: d.items.map((item) => {
-          if (item.pricePerPerson) {
-            const netAdult = item.netPriceAdult || 0;
+    setDays((prevDays) => {
+      let hasChanges = false;
+      const updatedDays = prevDays.map((d) => {
+        const updatedItems = d.items.map((item) => {
+          const shouldBePerPerson =
+            ["Flight", "Hotel", "Insurance", "Activity", "Transfer"].includes(item.type) ||
+            childPassengers > 0
+              ? true
+              : item.pricePerPerson;
+
+          if (shouldBePerPerson) {
+            const netAdult =
+              item.netPriceAdult !== undefined
+                ? item.netPriceAdult
+                : item.netPrice || item.totalPrice || 0;
             const netChild = item.netPriceChild || 0;
-            const markAdult = item.markupAdult || 0;
+            const markAdult =
+              item.markupAdult !== undefined
+                ? item.markupAdult
+                : item.markup || 0;
             const markChild = item.markupChild || 0;
-            const calculatedNet = netAdult * passengers + netChild * childPassengers;
-            const calculatedMarkup = markAdult * passengers + markChild * childPassengers;
-            return {
-              ...item,
-              netPrice: calculatedNet,
-              markup: calculatedMarkup,
-              totalPrice: calculatedNet + calculatedMarkup,
-            };
+
+            let calculatedNet = netAdult * passengers + netChild * childPassengers;
+            let calculatedMarkup = markAdult * passengers + markChild * childPassengers;
+
+            if (item.type === "Insurance") {
+              calculatedNet = netAdult * (passengers + childPassengers);
+              calculatedMarkup = markAdult * (passengers + childPassengers);
+            }
+
+            const calculatedTotal = calculatedNet + calculatedMarkup;
+
+            if (
+              item.totalPrice !== calculatedTotal ||
+              item.netPrice !== calculatedNet ||
+              item.markup !== calculatedMarkup ||
+              !item.pricePerPerson ||
+              item.netPriceAdult === undefined
+            ) {
+              hasChanges = true;
+              return {
+                ...item,
+                pricePerPerson: true,
+                netPriceAdult: netAdult,
+                netPriceChild: netChild,
+                markupAdult: markAdult,
+                markupChild: markChild,
+                netPrice: calculatedNet,
+                markup: calculatedMarkup,
+                totalPrice: calculatedTotal,
+              };
+            }
           }
           return item;
-        }),
-      }))
-    );
+        });
+        return { ...d, items: updatedItems };
+      });
+
+      return hasChanges ? updatedDays : prevDays;
+    });
   }, [passengers, childPassengers]);
 
   // Recalculate Totals in real-time
@@ -291,17 +395,47 @@ export function QuoteBuilder({
     days,
   });
 
-  // Auto-generate installments helper
+  // Auto-generate installments helper con deducción de depósito inicial
   function handleGenerateInstallments(count: number) {
     if (totals.finalTotal <= 0) return;
-    const remaining = totals.finalTotal - (minimumDeposit > 0 ? minimumDeposit : 0);
-    const installments = generateAutoInstallments(
-      remaining > 0 ? remaining : totals.finalTotal,
-      count,
-      "monthly",
-      startDate || undefined
-    );
-    setAmortizationSchedule(installments);
+    const deposit = minimumDeposit > 0 ? minimumDeposit : 0;
+    const remaining = totals.finalTotal - deposit;
+
+    if (deposit > 0) {
+      const todayStr = new Date().toISOString().split("T")[0]!;
+      const initialInst: TravelInstallment = {
+        id: Math.random().toString(36).slice(2, 9),
+        code: "Depósito Inicial",
+        amount: deposit,
+        dueDate: todayStr,
+        status: "pending",
+      };
+
+      const remainingCount = count - 1 > 0 ? count - 1 : 1;
+      const nextMonthDate = new Date();
+      nextMonthDate.setDate(nextMonthDate.getDate() + 30);
+      const nextMonthStr = nextMonthDate.toISOString().split("T")[0]!;
+
+      const remainingInsts = generateAutoInstallments(
+        remaining > 0 ? remaining : 0,
+        remainingCount,
+        "monthly",
+        nextMonthStr
+      ).map((inst, idx) => ({
+        ...inst,
+        code: `Cuota ${idx + 2}/${count}`,
+      }));
+
+      setAmortizationSchedule([initialInst, ...remainingInsts]);
+    } else {
+      const installments = generateAutoInstallments(
+        totals.finalTotal,
+        count,
+        "monthly",
+        startDate || new Date().toISOString().split("T")[0]!
+      );
+      setAmortizationSchedule(installments);
+    }
   }
 
   // Days management
@@ -414,7 +548,7 @@ export function QuoteBuilder({
             const isPerPerson =
               patch.pricePerPerson !== undefined
                 ? patch.pricePerPerson
-                : it.pricePerPerson;
+                : it.pricePerPerson || childPassengers > 0;
 
             if (isPerPerson) {
               const netAdult =
@@ -438,9 +572,15 @@ export function QuoteBuilder({
                   ? patch.markupChild
                   : it.markupChild || 0;
 
-              const calculatedNet = netAdult * passengers + netChild * childPassengers;
-              const calculatedMarkup = markAdult * passengers + markChild * childPassengers;
+              let calculatedNet = netAdult * passengers + netChild * childPassengers;
+              let calculatedMarkup = markAdult * passengers + markChild * childPassengers;
 
+              if (it.type === "Insurance") {
+                calculatedNet = netAdult * (passengers + childPassengers);
+                calculatedMarkup = markAdult * (passengers + childPassengers);
+              }
+
+              updated.pricePerPerson = true;
               updated.netPriceAdult = netAdult;
               updated.netPriceChild = netChild;
               updated.markupAdult = markAdult;
@@ -583,6 +723,7 @@ export function QuoteBuilder({
       administrativeFee: Number(administrativeFee) || 0,
       profitability: Number(profitability) || 75,
       minimumDeposit: Number(minimumDeposit) || 0,
+      freelanceCommission: Number(freelanceCommission) || 0,
       days,
       amortizationSchedule,
       inclusions: inclusions.trim() || null,
@@ -839,10 +980,10 @@ export function QuoteBuilder({
                   </button>
                 </div>
 
-                {/* Origen y Destino con Sugerencias */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Origen y Destino con Sugerencias y Botón de Swap */}
+                <div className="flex flex-col sm:flex-row items-center gap-2">
                   {/* Origen */}
-                  <div className="relative space-y-1">
+                  <div className="relative space-y-1 flex-1 w-full">
                     <label className="text-xs font-semibold text-text-2">Ciudad o Aeropuerto de Origen</label>
                     <Input
                       value={originCity}
@@ -881,8 +1022,20 @@ export function QuoteBuilder({
                     )}
                   </div>
 
+                  {/* Botón Swap / Invertir Trayecto */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleSwapLocations}
+                    title="Invertir origen y destino"
+                    className="h-8 w-8 rounded-full border bg-muted/40 hover:bg-muted self-center mt-3 sm:mt-5 shrink-0"
+                  >
+                    <ArrowLeftRight className="h-4 w-4 text-text-2" />
+                  </Button>
+
                   {/* Destino */}
-                  <div className="relative space-y-1">
+                  <div className="relative space-y-1 flex-1 w-full">
                     <label className="text-xs font-semibold text-text-2">Ciudad o Destino Turístico *</label>
                     <Input
                       value={destination}
@@ -930,14 +1083,7 @@ export function QuoteBuilder({
                     <Input
                       type="date"
                       value={startDate}
-                      onChange={(e) => {
-                        const s = e.target.value;
-                        setStartDate(s);
-                        if (endDate && s) {
-                          const diff = Math.ceil((new Date(endDate).getTime() - new Date(s).getTime()) / (1000 * 3600 * 24));
-                          if (diff > 0) setNights(diff);
-                        }
-                      }}
+                      onChange={(e) => handleStartDateChange(e.target.value)}
                     />
                   </div>
                   <div className="space-y-1">
@@ -947,14 +1093,7 @@ export function QuoteBuilder({
                       value={flightType === "one-way" ? "" : endDate}
                       disabled={flightType === "one-way"}
                       min={startDate}
-                      onChange={(e) => {
-                        const ed = e.target.value;
-                        setEndDate(ed);
-                        if (startDate && ed) {
-                          const diff = Math.ceil((new Date(ed).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24));
-                          if (diff > 0) setNights(diff);
-                        }
-                      }}
+                      onChange={(e) => handleEndDateChange(e.target.value)}
                     />
                   </div>
                   <div className="space-y-1">
@@ -962,8 +1101,9 @@ export function QuoteBuilder({
                     <Input
                       type="number"
                       min="1"
-                      value={nights}
-                      onChange={(e) => setNights(Number(e.target.value))}
+                      value={nights === 0 ? "" : nights}
+                      onChange={(e) => handleNightsChange(Number(e.target.value))}
+                      onBlur={handleNightsBlur}
                     />
                   </div>
                   <div className="space-y-1">
@@ -986,8 +1126,9 @@ export function QuoteBuilder({
                     <Input
                       type="number"
                       min="1"
-                      value={passengers}
+                      value={passengers === 0 ? "" : passengers}
                       onChange={(e) => setPassengers(Number(e.target.value))}
+                      onBlur={handlePassengersBlur}
                     />
                   </div>
                   <div className="space-y-1">
@@ -2228,7 +2369,7 @@ export function QuoteBuilder({
             {showFinancial && (
               <div className="p-4 space-y-4 bg-muted/10">
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-text-2">Margen Comercial (%)</label>
                 <Input
@@ -2250,7 +2391,7 @@ export function QuoteBuilder({
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-2">Fee Administrativo</label>
+                <label className="text-xs font-semibold text-text-2">Fee Administrativo (x Pax)</label>
                 <Input
                   type="number"
                   min="0"
@@ -2288,6 +2429,17 @@ export function QuoteBuilder({
                   onChange={(e) => setProfitability(Number(e.target.value))}
                 />
               </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-text-2">Comisión Freelance (%)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={freelanceCommission}
+                  onChange={(e) => setFreelanceCommission(Number(e.target.value))}
+                  placeholder="Ej. 5"
+                />
+              </div>
             </div>
 
             {/* Live Totals Card */}
@@ -2305,12 +2457,47 @@ export function QuoteBuilder({
                     +{formatCurrency(totals.markupAmount, currency)}
                   </span>
                 </div>
+                {administrativeFee > 0 && (
+                  <div>
+                    <span className="text-xs text-text-3 block">
+                      Fee Admin ({passengers + childPassengers} pax):
+                    </span>
+                    <span className="font-semibold text-foreground">
+                      +{formatCurrency(administrativeFee * (passengers + childPassengers), currency)}
+                    </span>
+                  </div>
+                )}
                 <div>
-                  <span className="text-xs text-text-3 block">Total por Adulto ({passengers}):</span>
+                  <span className="text-xs text-text-3 block">Tarifa por Adulto ({passengers}):</span>
                   <span className="font-bold text-foreground">
                     {formatCurrency(totals.totalAdult, currency)}
                   </span>
                 </div>
+                {childPassengers > 0 && totals.totalChild > 0 && (
+                  <div>
+                    <span className="text-xs text-text-3 block">Tarifa por Niño ({childPassengers}):</span>
+                    <span className="font-bold text-foreground">
+                      {formatCurrency(totals.totalChild, currency)}
+                    </span>
+                  </div>
+                )}
+                {freelanceCommission > 0 && (
+                  <div>
+                    <span className="text-xs text-text-3 block">
+                      Comisión Freelance ({freelanceCommission}%):
+                    </span>
+                    <span className="font-semibold text-indigo-600">
+                      {formatCurrency(
+                        Math.max(
+                          0,
+                          (totals.finalTotal - totals.markupAmount - (administrativeFee * (passengers + childPassengers))) *
+                            (freelanceCommission / 100)
+                        ),
+                        currency
+                      )}
+                    </span>
+                  </div>
+                )}
                 <div className="text-right">
                   <span className="text-xs text-brand-text font-bold block">TOTAL COTIZADO:</span>
                   <span className="text-xl font-extrabold text-brand">
@@ -2359,7 +2546,9 @@ export function QuoteBuilder({
                 <div className="pt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {amortizationSchedule.map((inst, i) => (
                     <div key={inst.id} className="rounded border bg-muted/40 p-2 text-xs">
-                      <span className="text-text-3 block font-medium">Cuota {i + 1} ({inst.dueDate}):</span>
+                      <span className="text-text-3 block font-medium">
+                        {inst.code || `Cuota ${i + 1}`} ({inst.dueDate}):
+                      </span>
                       <span className="font-bold">{formatCurrency(inst.amount, currency)}</span>
                     </div>
                   ))}
