@@ -3,17 +3,19 @@
 import { useState, useEffect } from "react";
 import {
   ArrowLeftRight,
+  Car,
   ChevronDown,
   ChevronUp,
   DollarSign,
   Hotel,
   Layers,
+  MapPin,
   Plane,
   Plus,
   Shield,
+  ShieldCheck,
   Sparkles,
   Trash2,
-  Truck,
   Users,
   X,
 } from "lucide-react";
@@ -26,6 +28,8 @@ import {
   generateAutoInstallments,
 } from "@/lib/travel/pricing";
 import type {
+  FlightDetails,
+  HotelDetails,
   TravelCurrency,
   TravelDay,
   TravelInstallment,
@@ -33,7 +37,7 @@ import type {
   TravelItineraryItem,
 } from "@/lib/travel/types";
 import { SupplierCombobox } from "@/components/travel/suppliers/supplier-combobox";
-import { useAirlines, CITY_AIRPORT_MAP } from "@/hooks/useAirlines";
+import { CITY_AIRPORT_MAP } from "@/hooks/useAirlines";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
 
 
@@ -74,15 +78,6 @@ const AIRPORT_SUGGESTIONS = [
   { city: "Madrid", region: "España", airport: "Barajas", code: "MAD" },
   { city: "París", region: "Francia", airport: "Charles de Gaulle", code: "CDG" },
   { city: "Panamá", region: "Panamá", airport: "Tocumen", code: "PTY" },
-];
-
-const ITEM_TYPES: { type: TravelItemType; label: string; icon: typeof Plane }[] = [
-  { type: "Hotel", label: "Alojamiento / Hotel", icon: Hotel },
-  { type: "Flight", label: "Vuelo / Tiquete", icon: Plane },
-  { type: "Activity", label: "Tour / Actividad", icon: Users },
-  { type: "Transfer", label: "Traslado", icon: Truck },
-  { type: "Insurance", label: "Asistencia Médica", icon: Shield },
-  { type: "Other", label: "Otro Servicio", icon: Layers },
 ];
 
 export function QuoteBuilder({
@@ -245,16 +240,6 @@ export function QuoteBuilder({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const [activeAirlineItemId, setActiveAirlineItemId] = useState<string | null>(null);
-
-  const { searchAirlines } = useAirlines();
-  const currentItemAirline = activeAirlineItemId
-    ? days
-        .flatMap((d) => d.items)
-        .find((i) => i.id === activeAirlineItemId)
-        ?.flightDetails?.airline || ""
-    : "";
-  const airlineSuggestions = searchAirlines(currentItemAirline);
 
   function handleSwapLocations() {
     const tempCity = originCity;
@@ -1225,221 +1210,133 @@ export function QuoteBuilder({
                 </div>
                 <div>
                   <span className="block text-[10px] font-black uppercase tracking-widest text-brand">Paso 4 · Itinerario</span>
-                  <span className="block font-bold text-sm text-foreground">Servicios Día por Día ({days.length} Días)</span>
+                  <span className="block font-bold text-sm text-foreground">Planificación del Itinerario ({days.length} Días)</span>
                 </div>
                 <div className="rounded-full p-1 text-text-3 ml-2">
                   {showItinerary ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </div>
               </button>
 
-              <Button type="button" size="sm" variant="outline" onClick={addDay} className="h-8 text-xs font-semibold">
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Agregar Día {days.length + 1}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={loadingAi}
+                  onClick={handleAiSuggest}
+                  className="h-8 rounded-full text-xs font-bold bg-card border-brand/30 text-brand hover:bg-brand-soft hover:text-brand-text"
+                >
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                  {loadingAi ? "Diseñando con IA..." : "AI Itinerario"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={addDay}
+                  className="h-8 rounded-full text-xs font-bold border-border hover:bg-muted text-foreground"
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Día
+                </Button>
+              </div>
             </div>
 
             {showItinerary && (
-              <div className="p-4 space-y-4 bg-muted/10">
-              {days.map((day) => (
-                <div key={day.id} className="rounded-xl border bg-card p-4 space-y-3 shadow-xs">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand-text">
-                        {day.dayNumber}
-                      </span>
-                      <span className="font-bold text-sm text-foreground">
-                        Día {day.dayNumber}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {/* Add service buttons */}
-                      <div className="flex items-center gap-1">
-                        {ITEM_TYPES.map((t) => (
-                          <button
-                            key={t.type}
-                            type="button"
-                            onClick={() => addItem(day.id, t.type)}
-                            className="flex items-center gap-1 rounded bg-muted/60 px-2 py-1 text-[11px] font-medium hover:bg-muted text-foreground transition"
-                            title={`Agregar ${t.label}`}
-                          >
-                            <t.icon className="h-3 w-3" />
-                            <span className="hidden sm:inline">{t.label.split(" ")[0]}</span>
-                          </button>
-                        ))}
+              <div className="p-4 space-y-5 bg-muted/10">
+                {days.map((day) => (
+                  <div key={day.id} className="rounded-xl border bg-card p-4 space-y-4 shadow-xs">
+                    {/* Cabecera del Día */}
+                    <div className="flex items-center justify-between border-b pb-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand-text">
+                          {day.dayNumber}
+                        </span>
+                        <h3 className="font-bold text-sm text-foreground">
+                          Día {day.dayNumber}
+                        </h3>
                       </div>
 
                       {days.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeDay(day.id)}
-                          className="rounded p-1 text-danger-text hover:bg-danger-tint"
+                          className="rounded p-1.5 text-danger-text hover:bg-danger-tint transition"
                           title="Eliminar este día"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       )}
                     </div>
-                  </div>
 
-                  {/* Day Items */}
-                  {day.items.length === 0 ? (
-                    <p className="text-center py-3 text-xs text-text-3 italic">
-                      Sin servicios en este día. Haz clic arriba para agregar hotel, vuelo o tour.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {day.items.map((it) => {
-                        const isExpanded = expandedItemId === it.id;
-                        return (
-                          <div
-                            key={it.id}
-                            className={`rounded-xl border transition-all ${
-                              isExpanded
-                                ? "border-brand-primary/60 bg-card shadow-md"
-                                : "border-border/70 bg-card/60 hover:bg-card"
-                            } p-3.5 space-y-3`}
-                          >
-                            {/* Item Header / Top Row */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand-text font-bold text-xs">
-                                  {it.type === "Flight" ? (
-                                    <Plane className="h-4 w-4" />
-                                  ) : it.type === "Hotel" ? (
-                                    <Hotel className="h-4 w-4" />
-                                  ) : it.type === "Transfer" ? (
-                                    <Truck className="h-4 w-4" />
-                                  ) : it.type === "Insurance" ? (
-                                    <Shield className="h-4 w-4" />
-                                  ) : it.type === "Activity" ? (
-                                    <Users className="h-4 w-4" />
-                                  ) : (
-                                    <Layers className="h-4 w-4" />
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <Input
-                                    value={it.title}
+                    {/* Lista de Servicios del Día */}
+                    {day.items.length === 0 ? (
+                      <p className="text-center py-4 text-xs text-text-3 italic bg-muted/20 rounded-lg border border-dashed">
+                        Sin servicios agregados para este día. Usa los botones de abajo para agregar vuelo, hotel, actividad, traslado o seguro.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {day.items.map((it) => (
+                            <div
+                              key={it.id}
+                              className="bg-muted/30 rounded-xl p-3.5 sm:p-4 border border-border/80 space-y-3 shadow-2xs hover:border-brand/40 transition-colors"
+                            >
+                              {/* Fila 1: Tipo de Servicio, Checkbox Por Persona, Precios y Eliminar */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                {/* Selector de Tipo */}
+                                <div className="flex items-center gap-2 flex-1 w-full">
+                                  <div
+                                    className={`p-2 rounded-lg shrink-0 ${
+                                      it.type === "Flight"
+                                        ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                                        : it.type === "Hotel"
+                                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                        : it.type === "Activity"
+                                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                        : it.type === "Transfer"
+                                        ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                                        : it.type === "Insurance"
+                                        ? "bg-teal-500/10 text-teal-600 dark:text-teal-400"
+                                        : "bg-slate-500/10 text-slate-600 dark:text-slate-400"
+                                    }`}
+                                  >
+                                    {it.type === "Flight" ? (
+                                      <Plane className="h-4 w-4" />
+                                    ) : it.type === "Hotel" ? (
+                                      <Hotel className="h-4 w-4" />
+                                    ) : it.type === "Activity" ? (
+                                      <MapPin className="h-4 w-4" />
+                                    ) : it.type === "Transfer" ? (
+                                      <Car className="h-4 w-4" />
+                                    ) : it.type === "Insurance" ? (
+                                      <ShieldCheck className="h-4 w-4" />
+                                    ) : (
+                                      <Layers className="h-4 w-4" />
+                                    )}
+                                  </div>
+                                  <select
+                                    value={it.type}
                                     onChange={(e) =>
-                                      updateItem(day.id, it.id, { title: e.target.value })
+                                      updateItem(day.id, it.id, {
+                                        type: e.target.value as TravelItemType,
+                                      })
                                     }
-                                    placeholder="Título del servicio"
-                                    className="font-bold text-xs h-8"
-                                  />
-                                </div>
-                                <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-muted text-text-3 shrink-0">
-                                  {it.type}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-2 shrink-0">
-                                <div className="w-40 sm:w-44">
-                                  <SupplierCombobox
-                                    value={it.provider}
-                                    onChange={(provName) =>
-                                      updateItem(day.id, it.id, { provider: provName })
-                                    }
-                                    placeholder="Proveedor aliado..."
-                                  />
+                                    className="flex-1 px-2.5 py-1.5 rounded-lg border border-input bg-card text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand"
+                                  >
+                                    <option value="Flight">Vuelo</option>
+                                    <option value="Hotel">Hotel</option>
+                                    <option value="Activity">Actividad</option>
+                                    <option value="Transfer">Traslado</option>
+                                    <option value="Insurance">Asistencia Seguro</option>
+                                    <option value="Other">Otro</option>
+                                  </select>
                                 </div>
 
-                                <div className="text-right">
-                                  <p className="text-[10px] text-text-3 font-semibold uppercase">Total Ítem</p>
-                                  <p className="font-extrabold text-sm text-foreground">
-                                    {formatCurrency(it.totalPrice || 0, currency)}
-                                  </p>
-                                </div>
-
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    setExpandedItemId(isExpanded ? null : it.id)
-                                  }
-                                  className="h-8 w-8 p-0"
-                                  title={isExpanded ? "Contraer detalles" : "Expandir detalles"}
-                                >
-                                  {isExpanded ? (
-                                    <ChevronUp className="h-4 w-4" />
-                                  ) : (
-                                    <ChevronDown className="h-4 w-4" />
-                                  )}
-                                </Button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => removeItem(day.id, it.id)}
-                                  className="rounded p-1 text-text-3 hover:text-danger-text"
-                                  title="Eliminar ítem"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Collapsed Description row */}
-                            <div className="flex gap-2">
-                              <Input
-                                value={it.description}
-                                onChange={(e) =>
-                                  updateItem(day.id, it.id, { description: e.target.value })
-                                }
-                                placeholder="Notas o descripción rápida del servicio..."
-                                className="text-xs h-7 text-text-2"
-                              />
-                            </div>
-
-                            {/* Expandable Details Container */}
-                            {isExpanded && (
-                              <div className="pt-3 border-t space-y-4 text-xs">
-                                {/* PNR & Assigned Option */}
-                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-muted/30 p-3 rounded-lg border">
-                                  <div className="sm:col-span-4 space-y-1">
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-text-3">
-                                      PNR / Localizador
-                                    </label>
-                                    <Input
-                                      value={it.pnr || ""}
-                                      onChange={(e) =>
-                                        updateItem(day.id, it.id, {
-                                          pnr: e.target.value.toUpperCase(),
-                                        })
-                                      }
-                                      placeholder="Ej. ABC123"
-                                      className="font-mono uppercase font-bold text-xs h-8"
-                                    />
-                                  </div>
-
-                                  <div className="sm:col-span-4 space-y-1">
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-text-3">
-                                      Opción Multicotización
-                                    </label>
-                                    <select
-                                      value={
-                                        it.assignedOptions && it.assignedOptions[0]
-                                          ? it.assignedOptions[0]
-                                          : "Shared"
-                                      }
-                                      onChange={(e) =>
-                                        updateItem(day.id, it.id, {
-                                          assignedOptions: [
-                                            e.target.value as "A" | "B" | "C" | "Shared",
-                                          ],
-                                        })
-                                      }
-                                      className="h-8 w-full rounded-md border border-input bg-card px-2.5 text-xs font-semibold"
-                                    >
-                                      <option value="Shared">Compartido (Todas las opciones)</option>
-                                      <option value="A">Opción A</option>
-                                      <option value="B">Opción B</option>
-                                      <option value="C">Opción C</option>
-                                    </select>
-                                  </div>
-
-                                  <div className="sm:col-span-4 flex items-center justify-between sm:justify-end gap-3 pt-3 sm:pt-0">
-                                    <label className="flex items-center gap-2 cursor-pointer">
+                                {/* Bloque de Precios y Checkbox Por Persona */}
+                                <div className="flex flex-wrap items-center gap-2.5 justify-between sm:justify-end w-full sm:w-auto">
+                                  {/* Checkbox Por Persona */}
+                                  {(childPassengers > 0 || it.pricePerPerson) && (
+                                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-text-3 uppercase tracking-wider shrink-0 select-none">
                                       <input
                                         type="checkbox"
                                         checked={!!it.pricePerPerson}
@@ -1448,901 +1345,390 @@ export function QuoteBuilder({
                                             pricePerPerson: e.target.checked,
                                           })
                                         }
-                                        className="h-4 w-4 rounded border-gray-300 text-brand-primary focus:ring-brand-primary"
+                                        className="w-3.5 h-3.5 text-brand focus:ring-brand rounded cursor-pointer"
                                       />
-                                      <span className="text-[11px] font-bold text-foreground">
-                                        Tarifa por persona
-                                      </span>
+                                      <span>Por Persona</span>
                                     </label>
-                                  </div>
-                                </div>
-
-                                {/* Pricing Breakdown */}
-                                <div className="bg-card p-3 rounded-lg border space-y-3">
-                                  <div className="flex items-center justify-between border-b pb-2">
-                                    <span className="text-[11px] font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
-                                      <DollarSign className="h-3.5 w-3.5 text-brand-text" />
-                                      Desglose de Costos y Precios
-                                    </span>
-                                    <span className="text-[11px] text-text-3">
-                                      {it.pricePerPerson
-                                        ? `Cálculo x ${passengers} Adultos ${
-                                            childPassengers > 0
-                                              ? `+ ${childPassengers} Niños`
-                                              : ""
-                                          }`
-                                        : "Costo Global del Grupo"}
-                                    </span>
-                                  </div>
+                                  )}
 
                                   {it.pricePerPerson ? (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                      {/* Adult breakdown */}
-                                      <div className="bg-muted/20 p-2.5 rounded-lg border space-y-2">
-                                        <div className="flex justify-between items-center border-b pb-1">
-                                          <span className="font-bold text-xs text-foreground">
-                                            Adulto
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {it.type === "Insurance" ? (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-text-3 text-[10px] font-bold uppercase tracking-widest shrink-0">
+                                            Valor por Pax
                                           </span>
-                                          <span className="text-[10px] font-bold text-text-3 bg-muted px-1.5 py-0.5 rounded">
-                                            {passengers} pax
-                                          </span>
+                                          <Input
+                                            type="number"
+                                            value={
+                                              it.netPriceAdult === undefined
+                                                ? it.totalPrice || ""
+                                                : it.netPriceAdult || ""
+                                            }
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              updateItem(day.id, it.id, {
+                                                netPriceAdult:
+                                                  val === "" ? 0 : parseFloat(val) || 0,
+                                              });
+                                            }}
+                                            placeholder="0"
+                                            className="w-24 sm:w-28 h-8 px-2 py-1 text-xs font-bold text-right"
+                                          />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] font-semibold text-text-3">
-                                              Costo Neto Unitario
-                                            </label>
+                                      ) : (
+                                        <>
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-text-3 text-[10px] font-bold uppercase tracking-widest shrink-0">
+                                              Adulto
+                                            </span>
                                             <Input
                                               type="number"
-                                              value={it.netPriceAdult || ""}
-                                              onChange={(e) =>
-                                                updateItem(day.id, it.id, {
-                                                  netPriceAdult: Number(e.target.value),
-                                                })
+                                              value={
+                                                it.netPriceAdult === undefined
+                                                  ? it.totalPrice || ""
+                                                  : it.netPriceAdult || ""
                                               }
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                updateItem(day.id, it.id, {
+                                                  netPriceAdult:
+                                                    val === "" ? 0 : parseFloat(val) || 0,
+                                                });
+                                              }}
                                               placeholder="0"
-                                              className="h-8 text-xs text-right"
+                                              className="w-24 sm:w-28 h-8 px-2 py-1 text-xs font-bold text-right"
                                             />
                                           </div>
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] font-semibold text-emerald-600">
-                                              Markup / Comisión Unitario
-                                            </label>
-                                            <Input
-                                              type="number"
-                                              value={it.markupAdult || ""}
-                                              onChange={(e) =>
-                                                updateItem(day.id, it.id, {
-                                                  markupAdult: Number(e.target.value),
-                                                })
-                                              }
-                                              placeholder="0"
-                                              className="h-8 text-xs text-right font-semibold text-emerald-600"
-                                            />
-                                          </div>
-                                        </div>
-                                        <div className="text-[10px] text-text-3 text-right pt-1 border-t">
-                                          Total Adulto:{" "}
-                                          <span className="font-bold text-foreground">
-                                            {formatCurrency(
-                                              ((it.netPriceAdult || 0) +
-                                                (it.markupAdult || 0)) *
-                                                passengers,
-                                              currency
-                                            )}
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      {/* Child breakdown */}
-                                      <div className="bg-muted/20 p-2.5 rounded-lg border space-y-2">
-                                        <div className="flex justify-between items-center border-b pb-1">
-                                          <span className="font-bold text-xs text-foreground">
-                                            Niño
-                                          </span>
-                                          <span className="text-[10px] font-bold text-text-3 bg-muted px-1.5 py-0.5 rounded">
-                                            {childPassengers} pax
-                                          </span>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] font-semibold text-text-3">
-                                              Costo Neto Unitario
-                                            </label>
-                                            <Input
-                                              type="number"
-                                              disabled={childPassengers === 0}
-                                              value={it.netPriceChild || ""}
-                                              onChange={(e) =>
-                                                updateItem(day.id, it.id, {
-                                                  netPriceChild: Number(e.target.value),
-                                                })
-                                              }
-                                              placeholder="0"
-                                              className="h-8 text-xs text-right disabled:opacity-50"
-                                            />
-                                          </div>
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] font-semibold text-emerald-600">
-                                              Markup / Comisión Unitario
-                                            </label>
-                                            <Input
-                                              type="number"
-                                              disabled={childPassengers === 0}
-                                              value={it.markupChild || ""}
-                                              onChange={(e) =>
-                                                updateItem(day.id, it.id, {
-                                                  markupChild: Number(e.target.value),
-                                                })
-                                              }
-                                              placeholder="0"
-                                              className="h-8 text-xs text-right font-semibold text-emerald-600 disabled:opacity-50"
-                                            />
-                                          </div>
-                                        </div>
-                                        <div className="text-[10px] text-text-3 text-right pt-1 border-t">
-                                          Total Niños:{" "}
-                                          <span className="font-bold text-foreground">
-                                            {formatCurrency(
-                                              ((it.netPriceChild || 0) +
-                                                (it.markupChild || 0)) *
-                                                childPassengers,
-                                              currency
-                                            )}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Costo Neto Total Grupo
-                                        </label>
-                                        <Input
-                                          type="number"
-                                          value={it.netPrice || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              netPrice: Number(e.target.value),
-                                            })
-                                          }
-                                          placeholder="0"
-                                          className="h-8 text-xs text-right font-semibold"
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-emerald-600">
-                                          Markup / Comisión Total Grupo
-                                        </label>
-                                        <Input
-                                          type="number"
-                                          value={it.markup || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              markup: Number(e.target.value),
-                                            })
-                                          }
-                                          placeholder="0"
-                                          className="h-8 text-xs text-right font-semibold text-emerald-600"
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Flight Specific Form */}
-                                {it.type === "Flight" && (
-                                  <div className="p-3 bg-muted/20 rounded-lg border space-y-3">
-                                    <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
-                                      <Plane className="h-3.5 w-3.5 text-brand-text" />
-                                      Detalles del Vuelo
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                                      <div className="sm:col-span-5 relative space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Aerolínea
-                                        </label>
-                                        <Input
-                                          value={it.flightDetails?.airline || ""}
-                                          onFocus={() => setActiveAirlineItemId(it.id)}
-                                          onBlur={() =>
-                                            setTimeout(() => setActiveAirlineItemId(null), 250)
-                                          }
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              flightDetails: {
-                                                airline: e.target.value,
-                                                flightNumber:
-                                                  it.flightDetails?.flightNumber || "",
-                                                origin: it.flightDetails?.origin || "",
-                                                destination:
-                                                  it.flightDetails?.destination || "",
-                                                departureDate:
-                                                  it.flightDetails?.departureDate || "",
-                                                departureTime:
-                                                  it.flightDetails?.departureTime || "",
-                                                arrivalDate:
-                                                  it.flightDetails?.arrivalDate || "",
-                                                arrivalTime:
-                                                  it.flightDetails?.arrivalTime || "",
-                                                cabin:
-                                                  it.flightDetails?.cabin || "Economica",
-                                                baggageAllowance:
-                                                  it.flightDetails?.baggageAllowance,
-                                              },
-                                            })
-                                          }
-                                          placeholder="Avianca, LATAM, Iberia..."
-                                          className="h-8 text-xs font-semibold"
-                                        />
-
-                                        {activeAirlineItemId === it.id &&
-                                          airlineSuggestions.length > 0 && (
-                                            <div className="absolute top-full left-0 right-0 mt-1 bg-card rounded-lg shadow-xl border z-50 overflow-hidden py-1">
-                                              {airlineSuggestions.map((a) => (
-                                                <button
-                                                  key={a.iata + a.name}
-                                                  type="button"
-                                                  onClick={() => {
-                                                    updateItem(day.id, it.id, {
-                                                      flightDetails: {
-                                                        airline: `${a.name} (${a.iata})`,
-                                                        flightNumber:
-                                                          it.flightDetails?.flightNumber ||
-                                                          "",
-                                                        origin:
-                                                          it.flightDetails?.origin || "",
-                                                        destination:
-                                                          it.flightDetails?.destination ||
-                                                          "",
-                                                        departureDate:
-                                                          it.flightDetails?.departureDate ||
-                                                          "",
-                                                        departureTime:
-                                                          it.flightDetails?.departureTime ||
-                                                          "",
-                                                        arrivalDate:
-                                                          it.flightDetails?.arrivalDate ||
-                                                          "",
-                                                        arrivalTime:
-                                                          it.flightDetails?.arrivalTime ||
-                                                          "",
-                                                        cabin:
-                                                          it.flightDetails?.cabin ||
-                                                          "Economica",
-                                                        baggageAllowance:
-                                                          it.flightDetails
-                                                            ?.baggageAllowance,
-                                                      },
-                                                    });
-                                                    setActiveAirlineItemId(null);
-                                                  }}
-                                                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted text-left transition text-xs border-b last:border-0"
-                                                >
-                                                  <span className="font-bold text-foreground">
-                                                    {a.name}
-                                                  </span>
-                                                  <span className="text-[10px] text-text-3 font-mono">
-                                                    ({a.iata})
-                                                  </span>
-                                                </button>
-                                              ))}
+                                          {childPassengers > 0 && (
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="text-text-3 text-[10px] font-bold uppercase tracking-widest shrink-0">
+                                                Niño
+                                              </span>
+                                              <Input
+                                                type="number"
+                                                value={
+                                                  it.netPriceChild === 0 ||
+                                                  it.netPriceChild === undefined
+                                                    ? ""
+                                                    : it.netPriceChild
+                                                }
+                                                onChange={(e) => {
+                                                  const val = e.target.value;
+                                                  updateItem(day.id, it.id, {
+                                                    netPriceChild:
+                                                      val === "" ? 0 : parseFloat(val) || 0,
+                                                  });
+                                                }}
+                                                placeholder="0"
+                                                className="w-24 sm:w-28 h-8 px-2 py-1 text-xs font-bold text-right"
+                                              />
                                             </div>
                                           )}
-                                      </div>
-
-                                      <div className="sm:col-span-3 space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Vuelo #
-                                        </label>
-                                        <Input
-                                          value={it.flightDetails?.flightNumber || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              flightDetails: {
-                                                airline: it.flightDetails?.airline || "",
-                                                flightNumber: e.target.value.toUpperCase(),
-                                                origin: it.flightDetails?.origin || "",
-                                                destination:
-                                                  it.flightDetails?.destination || "",
-                                                departureDate:
-                                                  it.flightDetails?.departureDate || "",
-                                                departureTime:
-                                                  it.flightDetails?.departureTime || "",
-                                                arrivalDate:
-                                                  it.flightDetails?.arrivalDate || "",
-                                                arrivalTime:
-                                                  it.flightDetails?.arrivalTime || "",
-                                                cabin:
-                                                  it.flightDetails?.cabin || "Economica",
-                                                baggageAllowance:
-                                                  it.flightDetails?.baggageAllowance,
-                                              },
-                                            })
-                                          }
-                                          placeholder="AV 8520"
-                                          className="h-8 text-xs font-mono font-bold uppercase"
-                                        />
-                                      </div>
-
-                                      <div className="sm:col-span-4 space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Clase de Cabina
-                                        </label>
-                                        <select
-                                          value={it.flightDetails?.cabin || "Economica"}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              flightDetails: {
-                                                airline: it.flightDetails?.airline || "",
-                                                flightNumber:
-                                                  it.flightDetails?.flightNumber || "",
-                                                origin: it.flightDetails?.origin || "",
-                                                destination:
-                                                  it.flightDetails?.destination || "",
-                                                departureDate:
-                                                  it.flightDetails?.departureDate || "",
-                                                departureTime:
-                                                  it.flightDetails?.departureTime || "",
-                                                arrivalDate:
-                                                  it.flightDetails?.arrivalDate || "",
-                                                arrivalTime:
-                                                  it.flightDetails?.arrivalTime || "",
-                                                cabin: e.target.value as
-                                                  | "Economica"
-                                                  | "Premium Economy"
-                                                  | "Ejecutiva"
-                                                  | "Primera Clase",
-                                                baggageAllowance:
-                                                  it.flightDetails?.baggageAllowance,
-                                              },
-                                            })
-                                          }
-                                          className="h-8 w-full rounded-md border border-input bg-card px-2 text-xs"
-                                        >
-                                          <option value="Economica">Económica</option>
-                                          <option value="Premium Economy">Premium Economy</option>
-                                          <option value="Ejecutiva">Ejecutiva</option>
-                                          <option value="Primera Clase">Primera Clase</option>
-                                        </select>
-                                      </div>
+                                        </>
+                                      )}
+                                      <span className="text-foreground text-xs font-extrabold tracking-tight bg-card px-2.5 py-1 rounded-md shrink-0 border">
+                                        Total: {formatCurrency(it.totalPrice || 0, currency)}
+                                      </span>
                                     </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Origen (Ciudad o Aeropuerto)
-                                        </label>
-                                        <Input
-                                          value={it.flightDetails?.origin || ""}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            const mapped = CITY_AIRPORT_MAP[val.toLowerCase()];
-                                            updateItem(day.id, it.id, {
-                                              flightDetails: {
-                                                airline: it.flightDetails?.airline || "",
-                                                flightNumber:
-                                                  it.flightDetails?.flightNumber || "",
-                                                origin: mapped || val,
-                                                destination:
-                                                  it.flightDetails?.destination || "",
-                                                departureDate:
-                                                  it.flightDetails?.departureDate || "",
-                                                departureTime:
-                                                  it.flightDetails?.departureTime || "",
-                                                arrivalDate:
-                                                  it.flightDetails?.arrivalDate || "",
-                                                arrivalTime:
-                                                  it.flightDetails?.arrivalTime || "",
-                                                cabin:
-                                                  it.flightDetails?.cabin || "Economica",
-                                                baggageAllowance:
-                                                  it.flightDetails?.baggageAllowance,
-                                              },
-                                            });
-                                          }}
-                                          placeholder="Medellín, BOG, Madrid..."
-                                          className="h-8 text-xs font-semibold"
-                                        />
-                                      </div>
-
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Destino (Ciudad o Aeropuerto)
-                                        </label>
-                                        <Input
-                                          value={it.flightDetails?.destination || ""}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            const mapped = CITY_AIRPORT_MAP[val.toLowerCase()];
-                                            updateItem(day.id, it.id, {
-                                              flightDetails: {
-                                                airline: it.flightDetails?.airline || "",
-                                                flightNumber:
-                                                  it.flightDetails?.flightNumber || "",
-                                                origin: it.flightDetails?.origin || "",
-                                                destination: mapped || val,
-                                                departureDate:
-                                                  it.flightDetails?.departureDate || "",
-                                                departureTime:
-                                                  it.flightDetails?.departureTime || "",
-                                                arrivalDate:
-                                                  it.flightDetails?.arrivalDate || "",
-                                                arrivalTime:
-                                                  it.flightDetails?.arrivalTime || "",
-                                                cabin:
-                                                  it.flightDetails?.cabin || "Economica",
-                                                baggageAllowance:
-                                                  it.flightDetails?.baggageAllowance,
-                                              },
-                                            });
-                                          }}
-                                          placeholder="Cancún, Punta Cana, MIA..."
-                                          className="h-8 text-xs font-semibold"
-                                        />
-                                      </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-text-3 text-xs font-bold uppercase tracking-widest shrink-0">
+                                        Precio
+                                      </span>
+                                      <Input
+                                        type="number"
+                                        value={it.totalPrice === 0 ? "" : it.totalPrice}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          updateItem(day.id, it.id, {
+                                            totalPrice: val === "" ? 0 : parseFloat(val) || 0,
+                                            netPrice: val === "" ? 0 : parseFloat(val) || 0,
+                                            markup: 0,
+                                          });
+                                        }}
+                                        placeholder="0"
+                                        className="w-28 sm:w-32 h-8 px-2 py-1 text-xs font-bold text-right"
+                                      />
                                     </div>
+                                  )}
 
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Fecha Salida
-                                        </label>
-                                        <Input
-                                          type="date"
-                                          value={it.flightDetails?.departureDate || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              flightDetails: {
-                                                airline: it.flightDetails?.airline || "",
-                                                flightNumber:
-                                                  it.flightDetails?.flightNumber || "",
-                                                origin: it.flightDetails?.origin || "",
-                                                destination:
-                                                  it.flightDetails?.destination || "",
-                                                departureDate: e.target.value,
-                                                departureTime:
-                                                  it.flightDetails?.departureTime || "",
-                                                arrivalDate:
-                                                  it.flightDetails?.arrivalDate || "",
-                                                arrivalTime:
-                                                  it.flightDetails?.arrivalTime || "",
-                                                cabin:
-                                                  it.flightDetails?.cabin || "Economica",
-                                                baggageAllowance:
-                                                  it.flightDetails?.baggageAllowance,
-                                              },
-                                            })
-                                          }
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Hora Salida
-                                        </label>
-                                        <Input
-                                          type="time"
-                                          value={it.flightDetails?.departureTime || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              flightDetails: {
-                                                airline: it.flightDetails?.airline || "",
-                                                flightNumber:
-                                                  it.flightDetails?.flightNumber || "",
-                                                origin: it.flightDetails?.origin || "",
-                                                destination:
-                                                  it.flightDetails?.destination || "",
-                                                departureDate:
-                                                  it.flightDetails?.departureDate || "",
-                                                departureTime: e.target.value,
-                                                arrivalDate:
-                                                  it.flightDetails?.arrivalDate || "",
-                                                arrivalTime:
-                                                  it.flightDetails?.arrivalTime || "",
-                                                cabin:
-                                                  it.flightDetails?.cabin || "Economica",
-                                                baggageAllowance:
-                                                  it.flightDetails?.baggageAllowance,
-                                              },
-                                            })
-                                          }
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Fecha Llegada
-                                        </label>
-                                        <Input
-                                          type="date"
-                                          value={it.flightDetails?.arrivalDate || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              flightDetails: {
-                                                airline: it.flightDetails?.airline || "",
-                                                flightNumber:
-                                                  it.flightDetails?.flightNumber || "",
-                                                origin: it.flightDetails?.origin || "",
-                                                destination:
-                                                  it.flightDetails?.destination || "",
-                                                departureDate:
-                                                  it.flightDetails?.departureDate || "",
-                                                departureTime:
-                                                  it.flightDetails?.departureTime || "",
-                                                arrivalDate: e.target.value,
-                                                arrivalTime:
-                                                  it.flightDetails?.arrivalTime || "",
-                                                cabin:
-                                                  it.flightDetails?.cabin || "Economica",
-                                                baggageAllowance:
-                                                  it.flightDetails?.baggageAllowance,
-                                              },
-                                            })
-                                          }
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Hora Llegada
-                                        </label>
-                                        <Input
-                                          type="time"
-                                          value={it.flightDetails?.arrivalTime || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              flightDetails: {
-                                                airline: it.flightDetails?.airline || "",
-                                                flightNumber:
-                                                  it.flightDetails?.flightNumber || "",
-                                                origin: it.flightDetails?.origin || "",
-                                                destination:
-                                                  it.flightDetails?.destination || "",
-                                                departureDate:
-                                                  it.flightDetails?.departureDate || "",
-                                                departureTime:
-                                                  it.flightDetails?.departureTime || "",
-                                                arrivalDate:
-                                                  it.flightDetails?.arrivalDate || "",
-                                                arrivalTime: e.target.value,
-                                                cabin:
-                                                  it.flightDetails?.cabin || "Economica",
-                                                baggageAllowance:
-                                                  it.flightDetails?.baggageAllowance,
-                                              },
-                                            })
-                                          }
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Hotel Specific Form */}
-                                {it.type === "Hotel" && (
-                                  <div className="p-3 bg-muted/20 rounded-lg border space-y-3">
-                                    <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
-                                      <Hotel className="h-3.5 w-3.5 text-brand-text" />
-                                      Detalles del Hotel / Hospedaje
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                                      <div className="sm:col-span-6 space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Nombre del Hotel
-                                        </label>
-                                        <Input
-                                          value={it.hotelDetails?.hotelName || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              hotelDetails: {
-                                                hotelName: e.target.value,
-                                                address: it.hotelDetails?.address || "",
-                                                checkIn: it.hotelDetails?.checkIn || "",
-                                                checkOut: it.hotelDetails?.checkOut || "",
-                                                roomType:
-                                                  it.hotelDetails?.roomType ||
-                                                  "Habitación Estándar",
-                                                boardBasis:
-                                                  it.hotelDetails?.boardBasis || "Desayuno",
-                                                stars: it.hotelDetails?.stars || 4,
-                                              },
-                                            })
-                                          }
-                                          placeholder="Riu Palace, Marriott, Decameron..."
-                                          className="h-8 text-xs font-semibold"
-                                        />
-                                      </div>
-
-                                      <div className="sm:col-span-6 space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Régimen de Alimentación
-                                        </label>
-                                        <select
-                                          value={it.hotelDetails?.boardBasis || "Desayuno"}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              hotelDetails: {
-                                                hotelName:
-                                                  it.hotelDetails?.hotelName || "",
-                                                address: it.hotelDetails?.address || "",
-                                                checkIn: it.hotelDetails?.checkIn || "",
-                                                checkOut: it.hotelDetails?.checkOut || "",
-                                                roomType:
-                                                  it.hotelDetails?.roomType ||
-                                                  "Habitación Estándar",
-                                                boardBasis: e.target.value as
-                                                  | "Solo Habitacion"
-                                                  | "Desayuno"
-                                                  | "Media Pension"
-                                                  | "Pension Completa"
-                                                  | "Todo Incluido",
-                                                stars: it.hotelDetails?.stars || 4,
-                                              },
-                                            })
-                                          }
-                                          className="h-8 w-full rounded-md border border-input bg-card px-2 text-xs font-semibold"
-                                        >
-                                          <option value="Solo Habitacion">Solo Habitación (EP)</option>
-                                          <option value="Desayuno">Desayuno Incluido (CP)</option>
-                                          <option value="Media Pension">Media Pensión (MAP)</option>
-                                          <option value="Pension Completa">Pensión Completa (FAP)</option>
-                                          <option value="Todo Incluido">Todo Incluido (All Inclusive)</option>
-                                        </select>
-                                      </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Tipo de Habitación
-                                        </label>
-                                        <Input
-                                          value={it.hotelDetails?.roomType || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              hotelDetails: {
-                                                hotelName:
-                                                  it.hotelDetails?.hotelName || "",
-                                                address: it.hotelDetails?.address || "",
-                                                checkIn: it.hotelDetails?.checkIn || "",
-                                                checkOut: it.hotelDetails?.checkOut || "",
-                                                roomType: e.target.value,
-                                                boardBasis:
-                                                  it.hotelDetails?.boardBasis || "Desayuno",
-                                                stars: it.hotelDetails?.stars || 4,
-                                              },
-                                            })
-                                          }
-                                          placeholder="Doble Estándar, Suite Vista al Mar..."
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Fecha Check-In
-                                        </label>
-                                        <Input
-                                          type="date"
-                                          value={it.hotelDetails?.checkIn || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              hotelDetails: {
-                                                hotelName:
-                                                  it.hotelDetails?.hotelName || "",
-                                                address: it.hotelDetails?.address || "",
-                                                checkIn: e.target.value,
-                                                checkOut: it.hotelDetails?.checkOut || "",
-                                                roomType:
-                                                  it.hotelDetails?.roomType ||
-                                                  "Habitación Estándar",
-                                                boardBasis:
-                                                  it.hotelDetails?.boardBasis || "Desayuno",
-                                                stars: it.hotelDetails?.stars || 4,
-                                              },
-                                            })
-                                          }
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Fecha Check-Out
-                                        </label>
-                                        <Input
-                                          type="date"
-                                          value={it.hotelDetails?.checkOut || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              hotelDetails: {
-                                                hotelName:
-                                                  it.hotelDetails?.hotelName || "",
-                                                address: it.hotelDetails?.address || "",
-                                                checkIn: it.hotelDetails?.checkIn || "",
-                                                checkOut: e.target.value,
-                                                roomType:
-                                                  it.hotelDetails?.roomType ||
-                                                  "Habitación Estándar",
-                                                boardBasis:
-                                                  it.hotelDetails?.boardBasis || "Desayuno",
-                                                stars: it.hotelDetails?.stars || 4,
-                                              },
-                                            })
-                                          }
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Transfer Specific Form */}
-                                {it.type === "Transfer" && (
-                                  <div className="p-3 bg-muted/20 rounded-lg border space-y-3">
-                                    <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
-                                      <Truck className="h-3.5 w-3.5 text-brand-text" />
-                                      Detalles del Traslado
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Punto de Recogida (Pickup)
-                                        </label>
-                                        <Input
-                                          value={it.transferDetails?.pickupPoint || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              transferDetails: {
-                                                pickupPoint: e.target.value,
-                                                dropoffPoint:
-                                                  it.transferDetails?.dropoffPoint || "",
-                                                date: it.transferDetails?.date || "",
-                                                time: it.transferDetails?.time || "",
-                                                vehicleType:
-                                                  it.transferDetails?.vehicleType || "",
-                                                passengers:
-                                                  it.transferDetails?.passengers ||
-                                                  passengers + childPassengers,
-                                              },
-                                            })
-                                          }
-                                          placeholder="Aeropuerto Internacional..."
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Punto de Bajada (Dropoff)
-                                        </label>
-                                        <Input
-                                          value={it.transferDetails?.dropoffPoint || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              transferDetails: {
-                                                pickupPoint:
-                                                  it.transferDetails?.pickupPoint || "",
-                                                dropoffPoint: e.target.value,
-                                                date: it.transferDetails?.date || "",
-                                                time: it.transferDetails?.time || "",
-                                                vehicleType:
-                                                  it.transferDetails?.vehicleType || "",
-                                                passengers:
-                                                  it.transferDetails?.passengers ||
-                                                  passengers + childPassengers,
-                                              },
-                                            })
-                                          }
-                                          placeholder="Hotel o dirección..."
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Fecha
-                                        </label>
-                                        <Input
-                                          type="date"
-                                          value={it.transferDetails?.date || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              transferDetails: {
-                                                pickupPoint:
-                                                  it.transferDetails?.pickupPoint || "",
-                                                dropoffPoint:
-                                                  it.transferDetails?.dropoffPoint || "",
-                                                date: e.target.value,
-                                                time: it.transferDetails?.time || "",
-                                                vehicleType:
-                                                  it.transferDetails?.vehicleType || "",
-                                                passengers:
-                                                  it.transferDetails?.passengers ||
-                                                  passengers + childPassengers,
-                                              },
-                                            })
-                                          }
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Hora
-                                        </label>
-                                        <Input
-                                          type="time"
-                                          value={it.transferDetails?.time || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              transferDetails: {
-                                                pickupPoint:
-                                                  it.transferDetails?.pickupPoint || "",
-                                                dropoffPoint:
-                                                  it.transferDetails?.dropoffPoint || "",
-                                                date: it.transferDetails?.date || "",
-                                                time: e.target.value,
-                                                vehicleType:
-                                                  it.transferDetails?.vehicleType || "",
-                                                passengers:
-                                                  it.transferDetails?.passengers ||
-                                                  passengers + childPassengers,
-                                              },
-                                            })
-                                          }
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-text-3">
-                                          Tipo de Vehículo
-                                        </label>
-                                        <Input
-                                          value={it.transferDetails?.vehicleType || ""}
-                                          onChange={(e) =>
-                                            updateItem(day.id, it.id, {
-                                              transferDetails: {
-                                                pickupPoint:
-                                                  it.transferDetails?.pickupPoint || "",
-                                                dropoffPoint:
-                                                  it.transferDetails?.dropoffPoint || "",
-                                                date: it.transferDetails?.date || "",
-                                                time: it.transferDetails?.time || "",
-                                                vehicleType: e.target.value,
-                                                passengers:
-                                                  it.transferDetails?.passengers ||
-                                                  passengers + childPassengers,
-                                              },
-                                            })
-                                          }
-                                          placeholder="Van compartida, Sedán privado..."
-                                          className="h-8 text-xs"
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeItem(day.id, it.id)}
+                                    className="p-1.5 text-text-3 hover:text-danger-text rounded-md transition-colors"
+                                    title="Eliminar este servicio"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
+
+                              {/* Fila 2: Título del servicio */}
+                              <Input
+                                type="text"
+                                value={it.title}
+                                onChange={(e) =>
+                                  updateItem(day.id, it.id, { title: e.target.value })
+                                }
+                                placeholder="Nombre o título del servicio..."
+                                className="w-full text-xs font-semibold h-8"
+                              />
+
+                              {/* Fila 3: Buscador de Proveedor Aliado */}
+                              <div>
+                                <SupplierCombobox
+                                  value={it.provider || ""}
+                                  onChange={(provName, selectedSup) => {
+                                    if (it.type === "Hotel") {
+                                      updateItem(day.id, it.id, {
+                                        provider: provName,
+                                        ...(provName ? { title: provName } : {}),
+                                        hotelDetails: {
+                                          ...it.hotelDetails!,
+                                          hotelName: provName || it.hotelDetails?.hotelName || "",
+                                          address:
+                                            selectedSup?.hotelMeta?.hotelAddress ||
+                                            selectedSup?.contact?.email ||
+                                            it.hotelDetails?.address ||
+                                            "",
+                                        },
+                                      });
+                                    } else {
+                                      updateItem(day.id, it.id, { provider: provName });
+                                    }
+                                  }}
+                                  placeholder={`Buscar ${
+                                    it.type === "Hotel" ? "hotel / hospedaje" : "proveedor"
+                                  }...`}
+                                />
+                              </div>
+
+                              {/* Fila 4: Descripción detallada */}
+                              <Textarea
+                                value={it.description || ""}
+                                onChange={(e) =>
+                                  updateItem(day.id, it.id, { description: e.target.value })
+                                }
+                                placeholder="Descripción detallada del servicio o notas..."
+                                rows={2}
+                                className="w-full text-xs resize-none"
+                              />
+
+                                {/* Campos directos de Hotel estilo Viajentor */}
+                                {it.type === "Hotel" && (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                    <div>
+                                      <label className="text-[10px] font-bold text-text-3 uppercase tracking-wider block mb-1">
+                                        Acomodación
+                                      </label>
+                                      <Input
+                                        type="text"
+                                        value={it.hotelDetails?.roomType || ""}
+                                        onChange={(e) =>
+                                          updateItem(day.id, it.id, {
+                                            hotelDetails: {
+                                              hotelName: it.title || it.hotelDetails?.hotelName || "",
+                                              address: it.hotelDetails?.address || "",
+                                              checkIn: it.hotelDetails?.checkIn || "",
+                                              checkOut: it.hotelDetails?.checkOut || "",
+                                              roomType: e.target.value,
+                                              boardBasis: it.hotelDetails?.boardBasis || "Solo Habitacion",
+                                              stars: it.hotelDetails?.stars || 4,
+                                            },
+                                          })
+                                        }
+                                        placeholder="Ej. Habitación Doble, Suite Presidencial"
+                                        className="h-8 text-xs font-medium"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[10px] font-bold text-text-3 uppercase tracking-wider block mb-1">
+                                        Alimentación
+                                      </label>
+                                      <Input
+                                        type="text"
+                                        value={it.hotelDetails?.boardBasis || ""}
+                                        onChange={(e) =>
+                                          updateItem(day.id, it.id, {
+                                            hotelDetails: {
+                                              hotelName: it.title || it.hotelDetails?.hotelName || "",
+                                              address: it.hotelDetails?.address || "",
+                                              checkIn: it.hotelDetails?.checkIn || "",
+                                              checkOut: it.hotelDetails?.checkOut || "",
+                                              roomType: it.hotelDetails?.roomType || "",
+                                              boardBasis: e.target.value as HotelDetails["boardBasis"],
+                                              stars: it.hotelDetails?.stars || 4,
+                                            },
+                                          })
+                                        }
+                                        placeholder="Ej. Todo Incluido, Desayuno buffet"
+                                        className="h-8 text-xs font-medium"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Detalles Técnicos Opcionales (PNR, Vuelos) */}
+                                <details className="text-xs group mt-1">
+                                  <summary className="cursor-pointer text-[11px] font-semibold text-text-3 hover:text-foreground select-none flex items-center gap-1.5 py-1">
+                                    <span>⚙️ Opciones avanzadas (PNR, Vuelos...)</span>
+                                  </summary>
+                                  <div className="mt-2 p-3 bg-card rounded-lg border border-border/80 space-y-3">
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      <div className="space-y-1">
+                                        <label className="text-[10px] font-semibold text-text-3">
+                                          Código PNR / Confirmación
+                                        </label>
+                                        <Input
+                                          value={it.pnr || ""}
+                                          onChange={(e) =>
+                                            updateItem(day.id, it.id, { pnr: e.target.value.toUpperCase() })
+                                          }
+                                          placeholder="Ej. ABC123"
+                                          className="h-8 text-xs font-mono uppercase"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    {/* Si es vuelo, formulario compacto de aerolínea y ruta */}
+                                    {it.type === "Flight" && (
+                                      <div className="pt-2 border-t border-dashed space-y-2">
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                          <div className="space-y-1">
+                                            <label className="text-[10px] font-semibold text-text-3">Aerolínea</label>
+                                            <Input
+                                              value={it.flightDetails?.airline || ""}
+                                              onChange={(e) =>
+                                                updateItem(day.id, it.id, {
+                                                  flightDetails: {
+                                                    departureDate: "",
+                                                    departureTime: "",
+                                                    arrivalDate: "",
+                                                    arrivalTime: "",
+                                                    ...it.flightDetails,
+                                                    airline: e.target.value,
+                                                    flightNumber: it.flightDetails?.flightNumber || "",
+                                                    origin: it.flightDetails?.origin || "",
+                                                    destination: it.flightDetails?.destination || "",
+                                                    cabin: it.flightDetails?.cabin || "Economica",
+                                                  },
+                                                })
+                                              }
+                                              placeholder="Avianca, LATAM..."
+                                              className="h-8 text-xs"
+                                            />
+                                          </div>
+                                          <div className="space-y-1">
+                                            <label className="text-[10px] font-semibold text-text-3">Vuelo #</label>
+                                            <Input
+                                              value={it.flightDetails?.flightNumber || ""}
+                                              onChange={(e) =>
+                                                updateItem(day.id, it.id, {
+                                                  flightDetails: {
+                                                    departureDate: "",
+                                                    departureTime: "",
+                                                    arrivalDate: "",
+                                                    arrivalTime: "",
+                                                    ...it.flightDetails,
+                                                    airline: it.flightDetails?.airline || "",
+                                                    flightNumber: e.target.value.toUpperCase(),
+                                                    origin: it.flightDetails?.origin || "",
+                                                    destination: it.flightDetails?.destination || "",
+                                                    cabin: it.flightDetails?.cabin || "Economica",
+                                                  },
+                                                })
+                                              }
+                                              placeholder="AV 8520"
+                                              className="h-8 text-xs font-mono uppercase"
+                                            />
+                                          </div>
+                                          <div className="space-y-1">
+                                            <label className="text-[10px] font-semibold text-text-3">Cabina</label>
+                                            <select
+                                              value={it.flightDetails?.cabin || "Economica"}
+                                              onChange={(e) =>
+                                                updateItem(day.id, it.id, {
+                                                  flightDetails: {
+                                                    departureDate: "",
+                                                    departureTime: "",
+                                                    arrivalDate: "",
+                                                    arrivalTime: "",
+                                                    ...it.flightDetails,
+                                                    airline: it.flightDetails?.airline || "",
+                                                    flightNumber: it.flightDetails?.flightNumber || "",
+                                                    origin: it.flightDetails?.origin || "",
+                                                    destination: it.flightDetails?.destination || "",
+                                                    cabin: e.target.value as FlightDetails["cabin"],
+                                                  },
+                                                })
+                                              }
+                                              className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                                            >
+                                              <option value="Economica">Económica</option>
+                                              <option value="Premium Economy">Premium Economy</option>
+                                              <option value="Ejecutiva">Ejecutiva</option>
+                                              <option value="Primera Clase">Primera Clase</option>
+                                            </select>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </details>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+
+                      {/* Botones de acción rápida por día estilo Viajentor */}
+                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/50">
+                        <button
+                          type="button"
+                          onClick={() => addItem(day.id, "Flight")}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <Plane className="w-3.5 h-3.5 text-blue-500" />
+                          <span>+ Vuelo</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => addItem(day.id, "Hotel")}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <Hotel className="w-3.5 h-3.5 text-amber-500" />
+                          <span>+ Hotel</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => addItem(day.id, "Activity")}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <MapPin className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>+ Actividad</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => addItem(day.id, "Transfer")}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <Car className="w-3.5 h-3.5 text-purple-500" />
+                          <span>+ Traslado</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => addItem(day.id, "Insurance")}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-teal-500" />
+                          <span>+ Asistencia Seguro</span>
+                        </button>
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
-              ))}
-              </div>
-            )}
+              )}
           </div>
 
           {/* Paso 5: Configuración Financiera y Plan de Pagos */}
