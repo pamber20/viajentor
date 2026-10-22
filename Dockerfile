@@ -6,7 +6,7 @@
 FROM node:22-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-RUN npm install -g pnpm@9.15.4
+RUN npm config set strict-ssl false && npm install -g pnpm@9.15.4 && pnpm config set strict-ssl false
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
