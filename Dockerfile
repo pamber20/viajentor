@@ -3,18 +3,17 @@
 # Los secretos NO se necesitan en build: llegan en runtime.
 # ============================================================
 
-FROM node:22-alpine AS deps
+FROM node:22-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 RUN npm install -g pnpm@9.15.4
+
+FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 ENV CI=true
 RUN pnpm install --frozen-lockfile || pnpm install
 
-FROM node:22-alpine AS builder
-RUN apk add --no-cache libc6-compat
-WORKDIR /app
-RUN npm install -g pnpm@9.15.4
+FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
