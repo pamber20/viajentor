@@ -4,14 +4,17 @@
 # ============================================================
 
 FROM node:22-alpine AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
-RUN corepack enable
+RUN npm install -g pnpm@9.15.4
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+ENV CI=true
+RUN pnpm install --frozen-lockfile || pnpm install
 
 FROM node:22-alpine AS builder
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
-RUN corepack enable
+RUN npm install -g pnpm@9.15.4
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1

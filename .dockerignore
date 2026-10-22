@@ -10,8 +10,6 @@ docs
 specs
 memory
 tests
-Dockerfile
-docker-compose*.yml
 Caddyfile
 README.md
 INSTALL-IA.md
