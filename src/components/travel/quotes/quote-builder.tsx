@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import {
   ArrowLeftRight,
   Car,
+  Check,
   ChevronDown,
   ChevronUp,
   DollarSign,
@@ -140,6 +141,9 @@ export function QuoteBuilder({
   );
   const [freelanceCommission, setFreelanceCommission] = useState<number>(
     initialQuote?.freelanceCommission ?? 0
+  );
+  const [selectedHotelId, setSelectedHotelId] = useState<string | null>(
+    initialQuote?.selectedHotelId ?? null
   );
 
   // Itinerary Days
@@ -380,11 +384,19 @@ export function QuoteBuilder({
     days,
   });
 
-  // Auto-generate installments helper con deducción de depósito inicial
-  function handleGenerateInstallments(count: number) {
-    if (totals.finalTotal <= 0) return;
+  const allHotels = days.flatMap((d) => d.items.filter((i) => i.type === "Hotel"));
+
+  // Auto-generate installments helper con deducción de depósito inicial y soporte para opción específica
+  function handleGenerateInstallments(count: number, targetTotal?: number, hotelId?: string) {
+    const totalToAmortize = targetTotal !== undefined ? targetTotal : totals.finalTotal;
+    if (totalToAmortize <= 0) return;
+
+    if (hotelId) {
+      setSelectedHotelId(hotelId);
+    }
+
     const deposit = minimumDeposit > 0 ? minimumDeposit : 0;
-    const remaining = totals.finalTotal - deposit;
+    const remaining = totalToAmortize - deposit;
 
     if (deposit > 0) {
       const todayStr = new Date().toISOString().split("T")[0]!;
@@ -414,7 +426,7 @@ export function QuoteBuilder({
       setAmortizationSchedule([initialInst, ...remainingInsts]);
     } else {
       const installments = generateAutoInstallments(
-        totals.finalTotal,
+        totalToAmortize,
         count,
         "monthly",
         startDate || new Date().toISOString().split("T")[0]!
@@ -709,6 +721,7 @@ export function QuoteBuilder({
       profitability: Number(profitability) || 75,
       minimumDeposit: Number(minimumDeposit) || 0,
       freelanceCommission: Number(freelanceCommission) || 0,
+      selectedHotelId: selectedHotelId || null,
       days,
       amortizationSchedule,
       inclusions: inclusions.trim() || null,
@@ -1244,6 +1257,14 @@ export function QuoteBuilder({
 
             {showItinerary && (
               <div className="p-4 space-y-5 bg-muted/10">
+                {allHotels.length > 1 && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 flex items-center gap-2.5 text-xs text-amber-800 dark:text-amber-200">
+                    <Hotel className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span>
+                      <strong>Multicotización activa:</strong> Hay {allHotels.length} hoteles en el itinerario. Cada hotel generará una alternativa independiente en el Resumen Financiero del Paso 5.
+                    </span>
+                  </div>
+                )}
                 {days.map((day) => (
                   <div key={day.id} className="rounded-xl border bg-card p-4 space-y-4 shadow-xs">
                     {/* Cabecera del Día */}
@@ -1330,6 +1351,11 @@ export function QuoteBuilder({
                                     <option value="Insurance">Asistencia Seguro</option>
                                     <option value="Other">Otro</option>
                                   </select>
+                                  {it.type === "Hotel" && allHotels.length > 1 && (
+                                    <span className="px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0">
+                                      Opción #{allHotels.findIndex((h) => h.id === it.id) + 1}
+                                    </span>
+                                  )}
                                 </div>
 
                                 {/* Bloque de Precios y Checkbox Por Persona */}
@@ -1828,119 +1854,343 @@ export function QuoteBuilder({
               </div>
             </div>
 
-            {/* Live Totals Card */}
-            <div className="rounded-lg border bg-card p-4 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-3">
-                <div>
-                  <span className="text-xs text-text-3 block">Subtotal Servicios Netos:</span>
-                  <span className="font-semibold text-foreground">
-                    {formatCurrency(totals.subtotal, currency)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-xs text-text-3 block">Margen de Ganancia:</span>
-                  <span className="font-semibold text-emerald-600">
-                    +{formatCurrency(totals.markupAmount, currency)}
-                  </span>
-                </div>
-                {administrativeFee > 0 && (
-                  <div>
-                    <span className="text-xs text-text-3 block">
-                      Fee Admin ({passengers + childPassengers} pax):
-                    </span>
-                    <span className="font-semibold text-foreground">
-                      +{formatCurrency(administrativeFee * (passengers + childPassengers), currency)}
-                    </span>
+            {/* Live Totals Card con soporte para Multicotización Segregada */}
+            {totals.byHotel && totals.byHotel.length > 1 ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 flex items-start gap-3">
+                  <Hotel className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <p className="font-extrabold text-foreground">
+                      Multicotización Activa: {totals.byHotel.length} Opciones de Alojamiento
+                    </p>
+                    <p className="text-text-3 leading-relaxed">
+                      Cada hotel se calcula de forma independiente sumando los servicios comunes del itinerario (vuelos, traslados, seguros, actividades) más ese hotel en particular, aplicando las tarifas y márgenes correspondientes.
+                    </p>
                   </div>
-                )}
-                <div>
-                  <span className="text-xs text-text-3 block">Tarifa por Adulto ({passengers}):</span>
-                  <span className="font-bold text-foreground">
-                    {formatCurrency(totals.totalAdult, currency)}
-                  </span>
                 </div>
-                {childPassengers > 0 && totals.totalChild > 0 && (
-                  <div>
-                    <span className="text-xs text-text-3 block">Tarifa por Niño ({childPassengers}):</span>
-                    <span className="font-bold text-foreground">
-                      {formatCurrency(totals.totalChild, currency)}
-                    </span>
-                  </div>
-                )}
-                {freelanceCommission > 0 && (
-                  <div>
-                    <span className="text-xs text-text-3 block">
-                      Comisión Freelance ({freelanceCommission}%):
-                    </span>
-                    <span className="font-semibold text-indigo-600">
-                      {formatCurrency(
-                        Math.max(
-                          0,
-                          (totals.finalTotal - totals.markupAmount - (administrativeFee * (passengers + childPassengers))) *
-                            (freelanceCommission / 100)
-                        ),
-                        currency
-                      )}
-                    </span>
-                  </div>
-                )}
-                <div className="text-right">
-                  <span className="text-xs text-brand-text font-bold block">TOTAL COTIZADO:</span>
-                  <span className="text-xl font-extrabold text-brand">
-                    {formatCurrency(totals.finalTotal, currency)}
-                  </span>
-                </div>
-              </div>
 
-              {/* Installments quick generator */}
-              <div className="pt-2 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-text-3">
-                  Generar amortización automática:
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => handleGenerateInstallments(2)}
-                  >
-                    2 Cuotas
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => handleGenerateInstallments(3)}
-                  >
-                    3 Cuotas
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => handleGenerateInstallments(4)}
-                  >
-                    4 Cuotas
-                  </Button>
-                </div>
-              </div>
+                <div className="space-y-4">
+                  {totals.byHotel.map((item, idx) => {
+                    const isSelected = selectedHotelId === item.hotelId;
+                    const profitPercent =
+                      item.hotelSubtotal + item.markupAmount > 0
+                        ? Math.round(
+                            (item.markupAmount / (item.hotelSubtotal + item.markupAmount)) * 100
+                          )
+                        : 0;
 
-              {amortizationSchedule.length > 0 && (
-                <div className="pt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {amortizationSchedule.map((inst, i) => (
-                    <div key={inst.id} className="rounded border bg-muted/40 p-2 text-xs">
-                      <span className="text-text-3 block font-medium">
-                        {inst.code || `Cuota ${i + 1}`} ({inst.dueDate}):
-                      </span>
-                      <span className="font-bold">{formatCurrency(inst.amount, currency)}</span>
+                    return (
+                      <div
+                        key={item.hotelId}
+                        className={`rounded-2xl p-6 transition-all text-white shadow-xl ${
+                          isSelected
+                            ? "bg-slate-900 ring-2 ring-emerald-500 border border-emerald-500/50"
+                            : "bg-slate-900 border border-slate-800"
+                        }`}
+                      >
+                        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/10 pb-5">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                Opción #{idx + 1}
+                              </span>
+                              {isSelected && (
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                                  <Check className="h-3 w-3" /> Seleccionada
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="text-xl font-black tracking-tight text-white">
+                              Resumen Financiero: {item.hotelTitle || `Hotel #${idx + 1}`}
+                            </h4>
+                            <p className="text-slate-400 text-xs">
+                              Inversión calculada con este hotel, impuestos, comisiones y tasas incluidas.
+                            </p>
+                          </div>
+
+                          <div className="text-left md:text-right">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                              Inversión Total Opción
+                            </span>
+                            <span className="text-3xl sm:text-4xl font-black tracking-tight text-amber-400">
+                              {formatCurrency(item.total, currency)}
+                            </span>
+                            <div className="text-[11px] text-slate-300 font-bold mt-1.5 space-y-0.5">
+                              <p>
+                                Total Adultos ({passengers}): {formatCurrency(item.totalAdult, currency)}{" "}
+                                <span className="text-slate-400 font-normal">
+                                  ({formatCurrency(item.totalAdult / (passengers || 1), currency)} c/u)
+                                </span>
+                              </p>
+                              {childPassengers > 0 && item.totalChild > 0 && (
+                                <p>
+                                  Total Niños ({childPassengers}): {formatCurrency(item.totalChild, currency)}{" "}
+                                  <span className="text-slate-400 font-normal">
+                                    ({formatCurrency(item.totalChild / childPassengers, currency)} c/u)
+                                  </span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Desglose Detallado por Opción */}
+                        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 text-xs ${freelanceCommission > 0 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+                          <div className="bg-white/5 p-3.5 rounded-xl border border-white/5 space-y-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                              Hotel Seleccionado
+                            </span>
+                            <p className="text-sm font-bold text-white truncate" title={item.hotelTitle}>
+                              {item.hotelTitle}
+                            </p>
+                            <p className="text-xs font-semibold text-slate-300">
+                              Neto: {formatCurrency(item.hotelSubtotal, currency)}
+                            </p>
+                            <p className="text-[11px] text-amber-400 font-medium">
+                              Rentabilidad ({profitPercent}%): +{formatCurrency(item.markupAmount, currency)}
+                            </p>
+                          </div>
+
+                          <div className="bg-white/5 p-3.5 rounded-xl border border-white/5 space-y-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                              Valor Vuelos y Otros
+                            </span>
+                            <div className="flex justify-between text-xs text-slate-200">
+                              <span>Vuelos:</span>
+                              <span className="font-semibold">{formatCurrency(item.flightsTotal, currency)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-slate-200">
+                              <span>Otros Servicios:</span>
+                              <span className="font-semibold">{formatCurrency(item.otherSubtotal, currency)}</span>
+                            </div>
+                          </div>
+
+                          <div className="bg-white/5 p-3.5 rounded-xl border border-white/5 space-y-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                              Cargos Adicionales
+                            </span>
+                            <div className="flex justify-between text-xs text-slate-200">
+                              <span>Fee Admin ({passengers + childPassengers} pax):</span>
+                              <span className="font-semibold">
+                                {formatCurrency(administrativeFee * (passengers + childPassengers), currency)}
+                              </span>
+                            </div>
+                            {taxes > 0 && (
+                              <div className="flex justify-between text-xs text-slate-200">
+                                <span>IVA / Impuestos ({taxes}%):</span>
+                                <span className="font-semibold">
+                                  +{formatCurrency(item.taxAmount, currency)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {freelanceCommission > 0 && (
+                            <div className="bg-white/5 p-3.5 rounded-xl border border-white/5 space-y-1">
+                              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                                Comisión Freelance ({freelanceCommission}%)
+                              </span>
+                              <p className="text-sm font-bold text-indigo-300">
+                                {formatCurrency(
+                                  Math.max(
+                                    0,
+                                    (item.total - item.markupAmount - (administrativeFee * (passengers + childPassengers)) - item.flightsTotal) *
+                                      (freelanceCommission / 100)
+                                  ),
+                                  currency
+                                )}
+                              </p>
+                              <p className="text-[10px] text-slate-400">Base sin comisión ni tasas</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Generador de amortización para esta opción */}
+                        <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isSelected ? "default" : "outline"}
+                            className={`h-7 text-xs ${
+                              isSelected
+                                ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                : "border-slate-700 text-slate-300 hover:bg-white/10"
+                            }`}
+                            onClick={() => setSelectedHotelId(item.hotelId)}
+                          >
+                            {isSelected ? "✓ Opción Seleccionada" : "Seleccionar esta opción"}
+                          </Button>
+
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-slate-400 mr-1 hidden sm:inline">
+                              Amortizar:
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-slate-700 text-slate-200 hover:bg-white/10"
+                              onClick={() => handleGenerateInstallments(2, item.total, item.hotelId)}
+                            >
+                              2 Cuotas
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-slate-700 text-slate-200 hover:bg-white/10"
+                              onClick={() => handleGenerateInstallments(3, item.total, item.hotelId)}
+                            >
+                              3 Cuotas
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-slate-700 text-slate-200 hover:bg-white/10"
+                              onClick={() => handleGenerateInstallments(4, item.total, item.hotelId)}
+                            >
+                              4 Cuotas
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {amortizationSchedule.length > 0 && (
+                  <div className="rounded-xl border bg-card p-4 space-y-2">
+                    <span className="text-xs font-semibold text-text-2 block">
+                      Plan de Amortización / Cuotas Registrado:
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {amortizationSchedule.map((inst, i) => (
+                        <div key={inst.id} className="rounded border bg-muted/40 p-2 text-xs">
+                          <span className="text-text-3 block font-medium">
+                            {inst.code || `Cuota ${i + 1}`} ({inst.dueDate}):
+                          </span>
+                          <span className="font-bold">{formatCurrency(inst.amount, currency)}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-lg border bg-card p-4 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-3">
+                  <div>
+                    <span className="text-xs text-text-3 block">Subtotal Servicios Netos:</span>
+                    <span className="font-semibold text-foreground">
+                      {formatCurrency(totals.subtotal, currency)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-text-3 block">Margen de Ganancia:</span>
+                    <span className="font-semibold text-emerald-600">
+                      +{formatCurrency(totals.markupAmount, currency)}
+                    </span>
+                  </div>
+                  {administrativeFee > 0 && (
+                    <div>
+                      <span className="text-xs text-text-3 block">
+                        Fee Admin ({passengers + childPassengers} pax):
+                      </span>
+                      <span className="font-semibold text-foreground">
+                        +{formatCurrency(administrativeFee * (passengers + childPassengers), currency)}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-xs text-text-3 block">Tarifa por Adulto ({passengers}):</span>
+                    <span className="font-bold text-foreground">
+                      {formatCurrency(totals.totalAdult, currency)}
+                    </span>
+                  </div>
+                  {childPassengers > 0 && totals.totalChild > 0 && (
+                    <div>
+                      <span className="text-xs text-text-3 block">Tarifa por Niño ({childPassengers}):</span>
+                      <span className="font-bold text-foreground">
+                        {formatCurrency(totals.totalChild, currency)}
+                      </span>
+                    </div>
+                  )}
+                  {freelanceCommission > 0 && (
+                    <div>
+                      <span className="text-xs text-text-3 block">
+                        Comisión Freelance ({freelanceCommission}%):
+                      </span>
+                      <span className="font-semibold text-indigo-600">
+                        {formatCurrency(
+                          Math.max(
+                            0,
+                            (totals.finalTotal - totals.markupAmount - (administrativeFee * (passengers + childPassengers))) *
+                              (freelanceCommission / 100)
+                          ),
+                          currency
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  <div className="text-right">
+                    <span className="text-xs text-brand-text font-bold block">TOTAL COTIZADO:</span>
+                    <span className="text-xl font-extrabold text-brand">
+                      {formatCurrency(totals.finalTotal, currency)}
+                    </span>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {/* Installments quick generator */}
+                <div className="pt-2 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-text-3">
+                    Generar amortización automática:
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => handleGenerateInstallments(2)}
+                    >
+                      2 Cuotas
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => handleGenerateInstallments(3)}
+                    >
+                      3 Cuotas
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => handleGenerateInstallments(4)}
+                    >
+                      4 Cuotas
+                    </Button>
+                  </div>
+                </div>
+
+                {amortizationSchedule.length > 0 && (
+                  <div className="pt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {amortizationSchedule.map((inst, i) => (
+                      <div key={inst.id} className="rounded border bg-muted/40 p-2 text-xs">
+                        <span className="text-text-3 block font-medium">
+                          {inst.code || `Cuota ${i + 1}`} ({inst.dueDate}):
+                        </span>
+                        <span className="font-bold">{formatCurrency(inst.amount, currency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
               </div>
             )}
           </div>

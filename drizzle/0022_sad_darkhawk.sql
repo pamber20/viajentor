@@ -1,0 +1,1 @@
+ALTER TABLE "travel_quote" ADD COLUMN "selected_hotel_id" text;

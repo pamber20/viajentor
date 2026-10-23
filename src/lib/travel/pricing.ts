@@ -311,10 +311,15 @@ export function calculateDetailedQuoteTotals(
     C: calculateForOption("C"),
   };
 
+  const finalTotal =
+    (results.B.byHotel?.length || 0) > 1
+      ? Math.min(...results.B.byHotel.map((h) => h.total))
+      : results.B.total;
+
   return {
     ...results.B,
     total: results.B.total,
-    finalTotal: results.B.total,
+    finalTotal,
     options: results,
   };
 }

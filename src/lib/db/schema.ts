@@ -1334,6 +1334,7 @@ export const travelQuote = pgTable(
     }),
     quoteNumber: text("quote_number").notNull(),
     bookingNumber: text("booking_number"),
+    selectedHotelId: text("selected_hotel_id"),
     isBooking: boolean("is_booking").notNull().default(false),
     status: text("status", {
       enum: ["draft", "sent", "viewed", "accepted", "rejected", "expired", "completed"],

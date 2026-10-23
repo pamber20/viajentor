@@ -27,6 +27,7 @@ export interface TravelQuoteDto {
   assignedUserId: string | null;
   quoteNumber: string;
   bookingNumber: string | null;
+  selectedHotelId: string | null;
   isBooking: boolean;
   status: QuoteStatus;
   bookingStatus: BookingStatus | null;
@@ -112,6 +113,7 @@ export function serializeQuote(row: QuoteRow): TravelQuoteDto {
     assignedUserId: row.assignedUserId,
     quoteNumber: row.quoteNumber,
     bookingNumber: row.bookingNumber,
+    selectedHotelId: row.selectedHotelId ?? null,
     isBooking: row.isBooking,
     status: row.status as QuoteStatus,
     bookingStatus: (row.bookingStatus as BookingStatus) ?? null,
@@ -315,6 +317,7 @@ export type CreateQuoteInput = {
   freelanceCommission?: number;
   validityHours?: number;
   optionTitles?: Record<string, string> | null;
+  selectedHotelId?: string | null;
   isComparisonMode?: boolean;
   activeOptionsCount?: number;
   days: TravelDay[];
@@ -399,6 +402,7 @@ export async function createQuote(input: CreateQuoteInput): Promise<TravelQuoteD
       freelanceCommission: input.freelanceCommission ?? 10,
       validityHours: input.validityHours ?? 48,
       optionTitles: input.optionTitles ?? null,
+      selectedHotelId: input.selectedHotelId ?? null,
       isComparisonMode: input.isComparisonMode ?? false,
       activeOptionsCount: input.activeOptionsCount ?? 1,
       days: input.days,
@@ -462,6 +466,7 @@ export type UpdateQuoteInput = {
   freelanceCommission?: number;
   validityHours?: number;
   optionTitles?: Record<string, string> | null;
+  selectedHotelId?: string | null;
   isComparisonMode?: boolean;
   activeOptionsCount?: number;
   days?: TravelDay[];
@@ -521,6 +526,7 @@ export async function updateQuote(input: UpdateQuoteInput): Promise<TravelQuoteD
   if (input.freelanceCommission !== undefined) patch.freelanceCommission = input.freelanceCommission;
   if (input.validityHours !== undefined) patch.validityHours = input.validityHours;
   if (input.optionTitles !== undefined) patch.optionTitles = input.optionTitles;
+  if (input.selectedHotelId !== undefined) patch.selectedHotelId = input.selectedHotelId;
   if (input.isComparisonMode !== undefined) patch.isComparisonMode = input.isComparisonMode;
   if (input.activeOptionsCount !== undefined) patch.activeOptionsCount = input.activeOptionsCount;
   if (input.days !== undefined) patch.days = input.days;
@@ -582,6 +588,7 @@ export async function deleteQuote(input: {
 export async function convertQuoteToBooking(input: {
   organizationId: string;
   quoteId: string;
+  selectedHotelId?: string | null;
   actorUserId?: string | null;
   notes?: string | null;
 }): Promise<{ quote: TravelQuoteDto; leadMoved: boolean }> {
@@ -595,6 +602,25 @@ export async function convertQuoteToBooking(input: {
     throw new Error("Cotización no encontrada");
   }
 
+  const allHotels = quote.days.flatMap((d) => d.items).filter((i) => i.type === "Hotel");
+  let updatedDays = quote.days;
+  let finalWinningTotal = quote.totals.finalTotal;
+
+  if (input.selectedHotelId || allHotels.length > 0) {
+    const hotelToKeep = input.selectedHotelId || allHotels[0]?.id;
+    if (hotelToKeep) {
+      updatedDays = quote.days.map((day) => ({
+        ...day,
+        items: day.items.filter((item) => item.type !== "Hotel" || item.id === hotelToKeep),
+      }));
+
+      const matchedHotel = quote.totals.byHotel?.find((h) => h.hotelId === hotelToKeep);
+      if (matchedHotel) {
+        finalWinningTotal = matchedHotel.total;
+      }
+    }
+  }
+
   const bookingNumber = quote.bookingNumber ?? (await generateBookingNumber(input.organizationId));
 
   const [updated] = await db
@@ -602,6 +628,8 @@ export async function convertQuoteToBooking(input: {
     .set({
       isBooking: true,
       bookingNumber,
+      selectedHotelId: input.selectedHotelId ?? quote.selectedHotelId ?? (allHotels[0]?.id || null),
+      days: updatedDays,
       status: "accepted",
       bookingStatus: "confirmed",
       observations: input.notes
@@ -640,7 +668,7 @@ export async function convertQuoteToBooking(input: {
 
     if (wonStages[0]) {
       // Monto total en centavos para el CRM (COP o USD a centavos)
-      const amountCents = Math.round(quote.totals.finalTotal * 100);
+      const amountCents = Math.round(finalWinningTotal * 100);
 
       const moveRes = await moveLeadToStage({
         organizationId: input.organizationId,
