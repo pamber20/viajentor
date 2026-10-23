@@ -5,6 +5,8 @@ import { DollarSign, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { formatCurrency } from "@/lib/travel/pricing";
+import type { TravelInstallment } from "@/lib/travel/types";
 import type { TravelPaymentDto } from "@/server/travel/trips";
 
 const PAYMENT_METHODS = [
@@ -22,18 +24,23 @@ export function PaymentModal({
   quoteId,
   suggestedAmount,
   currency = "COP",
+  installments = [],
+  initialInstallmentId,
   onClose,
   onSaved,
 }: {
   quoteId: string;
   suggestedAmount?: number;
   currency?: string;
+  installments?: TravelInstallment[];
+  initialInstallmentId?: string;
   onClose: () => void;
   onSaved: (payment: TravelPaymentDto) => void;
 }) {
   const [amount, setAmount] = useState<number | "">(suggestedAmount ?? "");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]!);
   const [method, setMethod] = useState(PAYMENT_METHODS[0]!);
+  const [installmentId, setInstallmentId] = useState<string>(initialInstallmentId ?? "");
   const [reference, setReference] = useState("");
   const [receiptNumber, setReceiptNumber] = useState(
     `REC-${Date.now().toString().slice(-6)}`
@@ -58,6 +65,7 @@ export function PaymentModal({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           quoteId,
+          installmentId: installmentId || null,
           amount: Number(amount),
           date,
           method,
@@ -132,6 +140,32 @@ export function PaymentModal({
             />
           </div>
 
+          {installments.length > 0 && (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-text-2">
+                Asignar a Cuota Específica
+              </label>
+              <select
+                value={installmentId}
+                onChange={(e) => {
+                  setInstallmentId(e.target.value);
+                  const selectedInst = installments.find((i) => i.id === e.target.value);
+                  if (selectedInst && (!amount || amount === suggestedAmount)) {
+                    setAmount(selectedInst.amount);
+                  }
+                }}
+                className="w-full h-9 rounded-md border border-input bg-card px-2.5 text-xs text-foreground font-semibold"
+              >
+                <option value="">Distribución automática general</option>
+                {installments.map((inst, idx) => (
+                  <option key={inst.id} value={inst.id}>
+                    Cuota {idx + 1} {inst.code ? `(${inst.code})` : ""} - {formatCurrency(inst.amount, currency)} [Vence: {inst.dueDate}]
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-2.5">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-text-2">Fecha de pago</label>
@@ -142,8 +176,9 @@ export function PaymentModal({
                 required
               />
             </div>
+
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-text-2">N° Comprobante / Recibo</label>
+              <label className="text-xs font-semibold text-text-2">Nº de Recibo</label>
               <Input
                 value={receiptNumber}
                 onChange={(e) => setReceiptNumber(e.target.value)}
@@ -157,7 +192,7 @@ export function PaymentModal({
             <select
               value={method}
               onChange={(e) => setMethod(e.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-xs text-foreground"
+              className="w-full h-9 rounded-md border border-input bg-card px-2.5 text-xs text-foreground font-semibold"
             >
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
@@ -169,31 +204,42 @@ export function PaymentModal({
 
           <div className="space-y-1">
             <label className="text-xs font-semibold text-text-2">
-              Número de Referencia / Aprobación bancaria
+              Referencia / Comprobante (opcional)
             </label>
             <Input
               value={reference}
               onChange={(e) => setReference(e.target.value)}
-              placeholder="Ej. Transf #98234, Aprobación #1240"
+              placeholder="Ej. Aprobación #884920, Transferencia Bancolombia"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-text-2">Notas internas</label>
+            <label className="text-xs font-semibold text-text-2">
+              Notas u observaciones (opcional)
+            </label>
             <Textarea
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Comprobante verificado en cuenta..."
+              placeholder="Abono correspondiente al 50% de bloqueo..."
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              disabled={saving}
+            >
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Guardando…" : "Registrar Abono"}
+            <Button
+              type="submit"
+              disabled={saving}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {saving ? "Registrando…" : "Confirmar Abono"}
             </Button>
           </div>
         </form>
