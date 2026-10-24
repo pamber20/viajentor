@@ -322,7 +322,7 @@ export function BrandingClient({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="agency-phone">Teléfono de atención</Label>
+              <Label htmlFor="agency-phone">Teléfono de atención principal</Label>
               <Input
                 id="agency-phone"
                 value={agency.phone ?? ""}
@@ -331,13 +331,127 @@ export function BrandingClient({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="agency-email">Email de reservas</Label>
+              <Label htmlFor="agency-phone2">Teléfono secundario (opcional)</Label>
+              <Input
+                id="agency-phone2"
+                value={agency.phone2 ?? ""}
+                onChange={(e) => setAgency({ ...agency, phone2: e.target.value })}
+                placeholder="+57 301 987 6543"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="agency-email">Email de reservas principal</Label>
               <Input
                 id="agency-email"
+                type="email"
                 value={agency.email ?? ""}
                 onChange={(e) => setAgency({ ...agency, email: e.target.value })}
                 placeholder="reservas@agencia.com"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="agency-email2">Email secundario / soporte (opcional)</Label>
+              <Input
+                id="agency-email2"
+                type="email"
+                value={agency.email2 ?? ""}
+                onChange={(e) => setAgency({ ...agency, email2: e.target.value })}
+                placeholder="soporte@agencia.com"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="agency-address">Dirección física</Label>
+              <Input
+                id="agency-address"
+                value={agency.address ?? ""}
+                onChange={(e) => setAgency({ ...agency, address: e.target.value })}
+                placeholder="Calle 100 #15-20, Of. 501"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="agency-city">Ciudad / País</Label>
+              <Input
+                id="agency-city"
+                value={agency.city ?? ""}
+                onChange={(e) => setAgency({ ...agency, city: e.target.value })}
+                placeholder="Medellín, Colombia"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="agency-website">Sitio web oficial (opcional)</Label>
+            <Input
+              id="agency-website"
+              type="url"
+              value={agency.website ?? ""}
+              onChange={(e) => setAgency({ ...agency, website: e.target.value })}
+              placeholder="https://www.agencia.com"
+            />
+          </div>
+
+          <div className="pt-2 border-t">
+            <span className="text-xs font-bold text-text-2 uppercase tracking-wide block mb-3">
+              Redes Sociales y Canales Digitales
+            </span>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="agency-wa">WhatsApp comercial</Label>
+                <Input
+                  id="agency-wa"
+                  value={agency.socialMedia?.whatsapp ?? ""}
+                  onChange={(e) =>
+                    setAgency({
+                      ...agency,
+                      socialMedia: {
+                        ...agency.socialMedia,
+                        whatsapp: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="+57 300 123 4567"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="agency-ig">Instagram</Label>
+                <Input
+                  id="agency-ig"
+                  value={agency.socialMedia?.instagram ?? ""}
+                  onChange={(e) =>
+                    setAgency({
+                      ...agency,
+                      socialMedia: {
+                        ...agency.socialMedia,
+                        instagram: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="@tuagencia"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="agency-fb">Facebook</Label>
+                <Input
+                  id="agency-fb"
+                  value={agency.socialMedia?.facebook ?? ""}
+                  onChange={(e) =>
+                    setAgency({
+                      ...agency,
+                      socialMedia: {
+                        ...agency.socialMedia,
+                        facebook: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="facebook.com/tuagencia"
+                />
+              </div>
             </div>
           </div>
 
@@ -394,6 +508,8 @@ export function BrandingClient({
             />
           </div>
 
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {saved && <p className="text-sm text-emerald-600 font-semibold">Datos guardados ✓</p>}
           <Button disabled={saving} onClick={() => void save()}>
             {saving ? "Guardando…" : "Guardar datos de agencia"}
           </Button>

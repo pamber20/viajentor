@@ -23,6 +23,8 @@ const agencySchema = z
     bankAccount: z.string().optional(),
     phone: z.string().optional(),
     phone2: z.string().optional(),
+    address: z.string().optional(),
+    city: z.string().optional(),
     email: z.string().optional(),
     email2: z.string().optional(),
     website: z.string().optional(),

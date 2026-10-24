@@ -307,6 +307,29 @@ export function QuoteBuilder({
     }
   }
 
+  // Precargar políticas y márgenes base de la agencia si es una cotización nueva
+  useEffect(() => {
+    if (!initialQuote) {
+      fetch("/api/settings/branding")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          const agency = data?.branding?.agency;
+          if (agency) {
+            if (agency.generalPolicies) {
+              setPolicies((prev) => (prev ? prev : agency.generalPolicies));
+            }
+            if (agency.profitability && agency.profitability > 0) {
+              setProfitability(agency.profitability);
+            }
+            if (agency.freelanceCommission !== undefined) {
+              setFreelanceCommission(agency.freelanceCommission);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [initialQuote]);
+
   // Recalcular y sincronizar reactivamente los ítems cuando cambia el número de pasajeros
   useEffect(() => {
     setDays((prevDays) => {

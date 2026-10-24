@@ -202,6 +202,8 @@ export interface AgencyBranding {
   bankAccount?: string;
   phone?: string;
   phone2?: string;
+  address?: string;
+  city?: string;
   email?: string;
   email2?: string;
   website?: string;
