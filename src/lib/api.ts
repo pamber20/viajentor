@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { requireSession, UnauthorizedError, type SessionContext } from "@/lib/auth/session";
+import {
+  requireSession,
+  TenantSuspendedError,
+  UnauthorizedError,
+  type SessionContext,
+} from "@/lib/auth/session";
 
 /** Respuesta de error estándar de la API interna (contrato api.md). */
 export function apiError(
@@ -22,6 +27,9 @@ export function withAuth<Args extends unknown[]>(
     try {
       session = await requireSession();
     } catch (err) {
+      if (err instanceof TenantSuspendedError) {
+        return apiError(403, "tenant_suspended", err.message);
+      }
       if (err instanceof UnauthorizedError) {
         return apiError(401, "unauthorized", "No autenticado");
       }

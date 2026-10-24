@@ -9,6 +9,7 @@ import {
   ListChecks,
   Plane,
   Settings,
+  ShieldCheck,
   Sparkles,
   Users,
   type LucideIcon,
@@ -53,12 +54,15 @@ export const SETTINGS_ITEM: NavItem = {
 export function appNavGroups({
   agenda = false,
   travel = true,
+  superAdmin = false,
   role,
 }: {
   /** 015 — "Citas" solo existe si esta instancia encendió la agenda. */
   agenda?: boolean;
   /** Módulo de viajes: cotizaciones, viajes/reservas y proveedores. */
   travel?: boolean;
+  /** Viajentor 2.0 Multi-Tenant: panel global de agencias para el SuperAdmin. */
+  superAdmin?: boolean;
   /** #86 — La guía de inicio solo para quien puede configurar. */
   role?: string | null;
 }): NavGroup[] {
@@ -88,12 +92,21 @@ export function appNavGroups({
     { href: "/lab", label: "Laboratorio", icon: FlaskConical }
   );
 
-  return [
+  const groups: NavGroup[] = [
     { title: "Trabajo", items: trabajo },
     { title: "Agente", items: agente },
     // 019 — Se mide al final: primero se atiende y se organiza.
     { items: [{ href: "/results", label: "Resultados", icon: ChartColumn }] },
   ];
+
+  if (superAdmin) {
+    groups.push({
+      title: "SaaS Multi-Cliente",
+      items: [{ href: "/tenants", label: "Agencias", icon: ShieldCheck }],
+    });
+  }
+
+  return groups;
 }
 
 export type SettingsLink = { href: string; label: string };

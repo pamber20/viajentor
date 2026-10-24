@@ -46,8 +46,8 @@ export default function RegisterPage() {
       <CardHeader>
         <CardTitle>Crear cuenta</CardTitle>
         <CardDescription>
-          El primer registro crea la organización de esta instancia y queda
-          como propietario.
+          Crea tu agencia en Viajentor 2.0 y queda como propietario de tu
+          espacio de trabajo.
         </CardDescription>
       </CardHeader>
       <CardContent>

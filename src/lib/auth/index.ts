@@ -34,7 +34,7 @@ export function runInternalSignup<T>(fn: () => Promise<T>): Promise<T> {
   return internalSignupContext().run(true, fn);
 }
 
-function isInternalSignup(): boolean {
+export function isInternalSignup(): boolean {
   return internalSignupContext().getStore() === true;
 }
 

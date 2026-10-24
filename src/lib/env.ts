@@ -48,6 +48,10 @@ export const envSchema = z.object({
     .default("https://www.googleapis.com/calendar/v3"),
   GOOGLE_OAUTH_BASE_URL: z.string().url().default("https://oauth2.googleapis.com"),
   ALLOW_SIGNUP: z.string().optional(),
+  // SaaS Multi-Tenant (Viajentor 2.0): correos con acceso global de SuperAdmin,
+  // separados por coma. Además, el propietario de la organización "principal"
+  // tiene acceso de SuperAdmin por defecto.
+  SUPERADMIN_EMAILS: z.string().optional(),
   AGENT_COALESCE_MS: z.coerce.number().int().min(0).default(6000),
   WA_MOCK_ENABLED: z.string().optional(),
   // API key de un cerebro externo que conduzca la conversación por /api/bot/*.

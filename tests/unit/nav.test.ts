@@ -76,6 +76,15 @@ describe("barra lateral agrupada", () => {
     expect(isNavActive("/settings/ai", "/settings")).toBe(true);
     expect(isNavActive("/settings/ai", "/agent")).toBe(false);
   });
+
+  it("superAdmin añade el grupo SaaS Multi-Cliente con /tenants", () => {
+    const groups = appNavGroups({ role: "owner", superAdmin: true });
+    const saasGroup = groups.at(-1)!;
+    expect(saasGroup.title).toBe("SaaS Multi-Cliente");
+    expect(saasGroup.items.map((i) => ({ href: i.href, label: i.label }))).toEqual([
+      { href: "/tenants", label: "Agencias" },
+    ]);
+  });
 });
 
 describe("ajustes en tres secciones", () => {
