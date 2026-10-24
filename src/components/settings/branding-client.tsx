@@ -515,6 +515,196 @@ export function BrandingClient({
           </Button>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <CardTitle>Colores del PDF de Cotización</CardTitle>
+              <CardDescription>
+                Personaliza la paleta cromática con la que se generarán tus propuestas y cotizaciones en PDF.
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAgency({
+                  ...agency,
+                  theme: {
+                    ...(agency.theme || {}),
+                    pdfNavy: "#0B3B60",
+                    pdfAccent: "#eab308",
+                    pdfBackground: "#f8fafc",
+                    pdfTextPrimary: "#1e293b",
+                    pdfTextSecondary: "#64748b",
+                  },
+                });
+              }}
+              className="text-xs shrink-0 self-start sm:self-auto"
+            >
+              Restaurar Defaults
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            {/* Controles de color */}
+            <div className="space-y-4">
+              {[
+                {
+                  key: "pdfNavy",
+                  label: "Color Principal (Portada y Encabezados)",
+                  value: agency.theme?.pdfNavy || "#0B3B60",
+                },
+                {
+                  key: "pdfAccent",
+                  label: "Color de Acento (Precios y Destacados)",
+                  value: agency.theme?.pdfAccent || "#eab308",
+                },
+                {
+                  key: "pdfBackground",
+                  label: "Fondo Alterno (Cajas y Secciones)",
+                  value: agency.theme?.pdfBackground || "#f8fafc",
+                },
+                {
+                  key: "pdfTextPrimary",
+                  label: "Texto Principal (Títulos y Totales)",
+                  value: agency.theme?.pdfTextPrimary || "#1e293b",
+                },
+                {
+                  key: "pdfTextSecondary",
+                  label: "Texto Secundario (Detalles y Fechas)",
+                  value: agency.theme?.pdfTextSecondary || "#64748b",
+                },
+              ].map((field) => (
+                <div key={field.key} className="space-y-1.5">
+                  <Label htmlFor={`theme-${field.key}`}>{field.label}</Label>
+                  <div className="flex gap-2.5 items-center">
+                    <input
+                      type="color"
+                      id={`theme-color-${field.key}`}
+                      value={field.value}
+                      onChange={(e) =>
+                        setAgency({
+                          ...agency,
+                          theme: {
+                            ...(agency.theme || {}),
+                            [field.key]: e.target.value,
+                          },
+                        })
+                      }
+                      className="h-9 w-10 cursor-pointer rounded border border-input p-0.5 bg-card shrink-0"
+                    />
+                    <Input
+                      id={`theme-${field.key}`}
+                      maxLength={7}
+                      value={field.value}
+                      onChange={(e) =>
+                        setAgency({
+                          ...agency,
+                          theme: {
+                            ...(agency.theme || {}),
+                            [field.key]: e.target.value,
+                          },
+                        })
+                      }
+                      className="font-mono text-xs uppercase"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Vista Previa Interactiva */}
+            <div className="flex flex-col items-center justify-center p-4 rounded-xl border bg-muted/30">
+              <span className="text-[10px] font-black uppercase tracking-wider text-text-3 mb-3 block text-center">
+                Vista Previa del Documento PDF
+              </span>
+              <div className="w-full max-w-sm rounded-lg border bg-card shadow-lg overflow-hidden text-xs">
+                {/* Cabecera SVG Simulada */}
+                <div
+                  className="p-4 text-white relative"
+                  style={{
+                    backgroundColor: agency.theme?.pdfNavy || "#0B3B60",
+                  }}
+                >
+                  <div
+                    className="w-20 h-1.5 rounded mb-2"
+                    style={{
+                      backgroundColor: agency.theme?.pdfAccent || "#eab308",
+                    }}
+                  />
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold uppercase tracking-wider text-[11px]">
+                      {name.trim() || "Agencia de Viajes"}
+                    </span>
+                    <span className="text-[10px] opacity-80 font-mono">COTIZACIÓN</span>
+                  </div>
+                </div>
+
+                {/* Cuerpo del PDF Simulado */}
+                <div className="p-4 space-y-3">
+                  <div
+                    className="flex justify-between items-baseline border-b pb-2"
+                    style={{
+                      borderColor: agency.theme?.pdfBackground || "#f8fafc",
+                    }}
+                  >
+                    <span
+                      className="font-bold text-sm"
+                      style={{
+                        color: agency.theme?.pdfTextPrimary || "#1e293b",
+                      }}
+                    >
+                      Cancún Todo Incluido
+                    </span>
+                    <span
+                      className="font-bold text-base"
+                      style={{
+                        color: agency.theme?.pdfAccent || "#eab308",
+                      }}
+                    >
+                      $ 4.850.000 COP
+                    </span>
+                  </div>
+
+                  <div
+                    className="p-3 rounded-md border"
+                    style={{
+                      backgroundColor: agency.theme?.pdfBackground || "#f8fafc",
+                    }}
+                  >
+                    <div
+                      className="font-bold mb-0.5"
+                      style={{
+                        color: agency.theme?.pdfTextPrimary || "#1e293b",
+                      }}
+                    >
+                      Día 1: Vuelo Directo + Traslado
+                    </div>
+                    <div
+                      className="text-[11px]"
+                      style={{
+                        color: agency.theme?.pdfTextSecondary || "#64748b",
+                      }}
+                    >
+                      Avianca AV-302 · Hotel Riu Palace Cancún
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {saved && <p className="text-sm text-emerald-600 font-semibold">Colores guardados ✓</p>}
+          <Button disabled={saving} onClick={() => void save()}>
+            {saving ? "Guardando…" : "Guardar colores de PDF"}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

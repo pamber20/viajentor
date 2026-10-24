@@ -217,4 +217,14 @@ export interface AgencyBranding {
     facebook?: string;
     whatsapp?: string;
   };
+  theme?: {
+    primaryColor?: string;
+    secondaryColor?: string;
+    fontFamily?: string;
+    pdfNavy?: string;
+    pdfAccent?: string;
+    pdfBackground?: string;
+    pdfTextPrimary?: string;
+    pdfTextSecondary?: string;
+  };
 }

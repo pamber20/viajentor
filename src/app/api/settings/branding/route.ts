@@ -40,6 +40,18 @@ const agencySchema = z
         whatsapp: z.string().optional(),
       })
       .optional(),
+    theme: z
+      .object({
+        primaryColor: z.string().optional(),
+        secondaryColor: z.string().optional(),
+        fontFamily: z.string().optional(),
+        pdfNavy: z.string().optional(),
+        pdfAccent: z.string().optional(),
+        pdfBackground: z.string().optional(),
+        pdfTextPrimary: z.string().optional(),
+        pdfTextSecondary: z.string().optional(),
+      })
+      .optional(),
   })
   .optional();
 
