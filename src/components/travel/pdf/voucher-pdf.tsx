@@ -575,7 +575,7 @@ export function VoucherPDF({ voucher, agency, mode = "full" }: VoucherPDFProps) 
       {voucher.hotelDetails?.name && (mode === "full" || mode === "hotel") ? (
         <Page size="A4" style={styles.page}>
           <View style={styles.headerContainer}>
-            {agency.logoUrl ? (
+            {agency.logoUrl && typeof agency.logoUrl === "string" && agency.logoUrl.trim().length > 0 ? (
               <Image src={agency.logoUrl} style={styles.logo} />
             ) : (
               <Text style={styles.logoPlaceholder}>{agency.name}</Text>
@@ -740,7 +740,7 @@ export function VoucherPDF({ voucher, agency, mode = "full" }: VoucherPDFProps) 
       {voucher.flightDetails?.airline && (mode === "full" || mode === "flight") ? (
         <Page size="A4" style={styles.page}>
           <View style={styles.headerContainer}>
-            {agency.logoUrl ? (
+            {agency.logoUrl && typeof agency.logoUrl === "string" && agency.logoUrl.trim().length > 0 ? (
               <Image src={agency.logoUrl} style={styles.logo} />
             ) : (
               <Text style={styles.logoPlaceholder}>{agency.name}</Text>
@@ -898,7 +898,7 @@ export function VoucherPDF({ voucher, agency, mode = "full" }: VoucherPDFProps) 
       {voucher.transfers && voucher.transfers.length > 0 && (mode === "full" || mode === "transfers") ? (
         <Page size="A4" style={styles.page}>
           <View style={styles.headerContainer}>
-            {agency.logoUrl ? (
+            {agency.logoUrl && typeof agency.logoUrl === "string" && agency.logoUrl.trim().length > 0 ? (
               <Image src={agency.logoUrl} style={styles.logo} />
             ) : (
               <Text style={styles.logoPlaceholder}>{agency.name}</Text>
@@ -1026,7 +1026,7 @@ export function VoucherPDF({ voucher, agency, mode = "full" }: VoucherPDFProps) 
       {voucher.activities && voucher.activities.length > 0 && (mode === "full" || mode === "activities") ? (
         <Page size="A4" style={styles.page}>
           <View style={styles.headerContainer}>
-            {agency.logoUrl ? (
+            {agency.logoUrl && typeof agency.logoUrl === "string" && agency.logoUrl.trim().length > 0 ? (
               <Image src={agency.logoUrl} style={styles.logo} />
             ) : (
               <Text style={styles.logoPlaceholder}>{agency.name}</Text>

@@ -8,6 +8,7 @@ import {
   Eye,
   FileDown,
   FileText,
+  Loader2,
   MapPin,
   Plus,
   Search,
@@ -57,6 +58,19 @@ export function QuotesClient({
   const [editingQuote, setEditingQuote] = useState<TravelQuoteDto | null>(null);
   const [previewingQuote, setPreviewingQuote] = useState<TravelQuoteDto | null>(null);
   const [convertingQuote, setConvertingQuote] = useState<TravelQuoteDto | null>(null);
+  const [downloadingQuoteId, setDownloadingQuoteId] = useState<string | null>(null);
+
+  async function handleDownloadPdf(q: TravelQuoteDto) {
+    try {
+      setDownloadingQuoteId(q.id);
+      await downloadQuotePdf(q);
+    } catch (err) {
+      console.error("Error al descargar PDF:", err);
+      alert("Hubo un error al generar el PDF de la cotización.");
+    } finally {
+      setDownloadingQuoteId(null);
+    }
+  }
 
   const fetchQuotes = useCallback(async () => {
     setLoading(true);
@@ -242,12 +256,17 @@ export function QuotesClient({
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => void downloadQuotePdf(q)}
-                        className="h-8 px-2 text-xs text-brand hover:bg-brand-soft"
+                        disabled={downloadingQuoteId === q.id}
+                        onClick={() => void handleDownloadPdf(q)}
+                        className="h-8 px-2 text-xs text-brand hover:bg-brand-soft disabled:opacity-60"
                         title="Descargar PDF"
                       >
-                        <FileDown className="h-3.5 w-3.5 mr-1" />
-                        PDF
+                        {downloadingQuoteId === q.id ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        ) : (
+                          <FileDown className="h-3.5 w-3.5 mr-1" />
+                        )}
+                        {downloadingQuoteId === q.id ? "..." : "PDF"}
                       </Button>
                       <Button
                         size="sm"

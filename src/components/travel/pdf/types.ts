@@ -39,7 +39,9 @@ export function resolvePdfAgencyInfo(
   orgFallback?: { name?: string; logo?: string | null }
 ): PdfAgencyInfo {
   const name = agency?.name || orgFallback?.name || "Agencia de Viajes";
-  const logoUrl = agency?.logoUrl || orgFallback?.logo || undefined;
+  const rawLogo = agency?.logoUrl ?? orgFallback?.logo;
+  const logoUrl =
+    typeof rawLogo === "string" && rawLogo.trim().length > 0 ? rawLogo.trim() : undefined;
 
   return {
     id: agency?.id,

@@ -36,6 +36,7 @@ export function QuotePreviewModal({
       await downloadQuotePdf(quote);
     } catch (err) {
       console.error("Error al descargar PDF:", err);
+      alert("Hubo un error al generar el PDF de la cotización.");
     } finally {
       setDownloadingPdf(false);
     }

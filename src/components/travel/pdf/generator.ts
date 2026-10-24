@@ -6,21 +6,29 @@ import type { TravelQuoteDto } from "@/server/travel/quotes";
 import type { TravelPaymentDto, TravelVoucherDto } from "@/server/travel/trips";
 
 export async function getBase64ImageFromUrl(imageUrl: string): Promise<string> {
-  if (!imageUrl) return "";
+  if (!imageUrl || typeof imageUrl !== "string") return "";
   if (imageUrl.startsWith("data:")) return imageUrl;
 
   try {
     const res = await fetch(imageUrl, { mode: "cors" });
+    if (!res.ok) return "";
+    const contentType = res.headers.get("content-type");
+    if (contentType && !contentType.startsWith("image/")) {
+      return "";
+    }
     const blob = await res.blob();
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
+      reader.onloadend = () => {
+        const result = reader.result;
+        resolve(typeof result === "string" ? result : "");
+      };
+      reader.onerror = () => resolve("");
       reader.readAsDataURL(blob);
     });
   } catch (err) {
-    console.error("Error fetching image for Base64 conversion:", err);
-    return imageUrl;
+    console.warn("Error fetching image for Base64 conversion:", err);
+    return "";
   }
 }
 
@@ -30,9 +38,18 @@ export async function fetchCurrentAgencyInfo(): Promise<PdfAgencyInfo> {
     if (res.ok) {
       const data = await res.json();
       const branding = data?.branding;
+      const faviconUrl = branding?.favicon
+        ? `/api/branding/favicon?v=${branding.favicon.version || Date.now()}`
+        : undefined;
+      const logoUrl =
+        typeof branding?.logo === "string" && branding.logo.trim().length > 0
+          ? branding.logo.trim()
+          : faviconUrl;
+
       return resolvePdfAgencyInfo(
         {
           name: branding?.name,
+          logoUrl,
           ...branding?.agency,
           theme: {
             primaryColor: branding?.accent,
@@ -40,7 +57,7 @@ export async function fetchCurrentAgencyInfo(): Promise<PdfAgencyInfo> {
             ...branding?.agency?.theme,
           },
         },
-        { name: branding?.name, logo: branding?.logo || branding?.favicon }
+        { name: branding?.name, logo: logoUrl }
       );
     }
   } catch (e) {
@@ -59,18 +76,18 @@ export async function downloadQuotePdf(
 
   const baseAgency = agencyOverride ? resolvePdfAgencyInfo(agencyOverride) : await fetchCurrentAgencyInfo();
 
-  let logoUrl = baseAgency.logoUrl;
+  let logoUrl = typeof baseAgency.logoUrl === "string" ? baseAgency.logoUrl : "";
   if (logoUrl && !logoUrl.startsWith("data:")) {
     try {
       logoUrl = await getBase64ImageFromUrl(logoUrl);
     } catch {
-      // ignore
+      logoUrl = "";
     }
   }
 
   const finalAgency: PdfAgencyInfo = {
     ...baseAgency,
-    logoUrl,
+    logoUrl: logoUrl || undefined,
     advisorName: quote.advisorName || baseAgency.advisorName,
   };
 
@@ -107,18 +124,18 @@ export async function downloadReceiptPdf(
 
   const baseAgency = agencyOverride ? resolvePdfAgencyInfo(agencyOverride) : await fetchCurrentAgencyInfo();
 
-  let logoUrl = baseAgency.logoUrl;
+  let logoUrl = typeof baseAgency.logoUrl === "string" ? baseAgency.logoUrl : "";
   if (logoUrl && !logoUrl.startsWith("data:")) {
     try {
       logoUrl = await getBase64ImageFromUrl(logoUrl);
     } catch {
-      // ignore
+      logoUrl = "";
     }
   }
 
   const finalAgency: PdfAgencyInfo = {
     ...baseAgency,
-    logoUrl,
+    logoUrl: logoUrl || undefined,
   };
 
   const receiptNum = payment.receiptNumber || (payment.id ? payment.id.slice(0, 6).toUpperCase() : "Pago");
@@ -152,18 +169,18 @@ export async function downloadVoucherPdf(
 
   const baseAgency = agencyOverride ? resolvePdfAgencyInfo(agencyOverride) : await fetchCurrentAgencyInfo();
 
-  let logoUrl = baseAgency.logoUrl;
+  let logoUrl = typeof baseAgency.logoUrl === "string" ? baseAgency.logoUrl : "";
   if (logoUrl && !logoUrl.startsWith("data:")) {
     try {
       logoUrl = await getBase64ImageFromUrl(logoUrl);
     } catch {
-      // ignore
+      logoUrl = "";
     }
   }
 
   const finalAgency: PdfAgencyInfo = {
     ...baseAgency,
-    logoUrl,
+    logoUrl: logoUrl || undefined,
   };
 
   const filename = `Voucher_${voucher.voucherNumber || "Turistico"}.pdf`;

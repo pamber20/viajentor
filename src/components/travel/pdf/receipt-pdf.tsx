@@ -181,7 +181,7 @@ export function ReceiptPDF({ payment, quote, agency }: ReceiptPDFProps) {
       <Page size="LETTER" style={[styles.page, { backgroundColor: pdfBackground, color: pdfTextPrimary }]}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: pdfAccent }]}>
-          {agency.logoUrl ? (
+          {agency.logoUrl && typeof agency.logoUrl === "string" && agency.logoUrl.trim().length > 0 ? (
             <Image src={agency.logoUrl} style={styles.logo} />
           ) : (
             <Text style={{ fontSize: 16, fontWeight: "bold", color: pdfNavy }}>{agency.name}</Text>

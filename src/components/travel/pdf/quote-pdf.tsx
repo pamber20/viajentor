@@ -517,7 +517,8 @@ export interface QuotePDFProps {
 }
 
 export function QuotePDF({ quote, agency, totals: passedTotals, currentUser, payments }: QuotePDFProps) {
-  const totals = passedTotals || calculateDetailedQuoteTotals(quote, agency as any);
+  const totals: ReturnType<typeof calculateDetailedQuoteTotals> =
+    passedTotals || (quote as any).totals || calculateDetailedQuoteTotals(quote, agency as any);
 
   const pdfNavy = agency.theme?.pdfNavy || agency.theme?.primaryColor || "#0B3B60";
   const pdfAccent = agency.theme?.pdfAccent || agency.theme?.secondaryColor || "#eab308";
@@ -580,7 +581,7 @@ export function QuotePDF({ quote, agency, totals: passedTotals, currentUser, pay
   const travelersList = quote.travelers || [];
   const finalTotalToDisplay =
     (totals.byHotel?.length || 0) > 1
-      ? Math.min(...totals.byHotel!.map((h) => h.total))
+      ? Math.min(...totals.byHotel!.map((h: any) => h.total))
       : totals.total || totals.finalTotal || 0;
 
   const totalCuotasPagadas = (quote.amortizationSchedule || [])
@@ -692,7 +693,7 @@ export function QuotePDF({ quote, agency, totals: passedTotals, currentUser, pay
           />
 
           <View style={styles.logoInHeader}>
-            {agency.logoUrl ? (
+            {agency.logoUrl && typeof agency.logoUrl === "string" && agency.logoUrl.trim().length > 0 ? (
               <Image src={agency.logoUrl} style={styles.logoHeader} />
             ) : (
               <Text style={[styles.headerTitleFallback, { color: pdfNavy }]}>{agency.name}</Text>
@@ -952,7 +953,7 @@ export function QuotePDF({ quote, agency, totals: passedTotals, currentUser, pay
           <View>
             <Text style={[styles.sectionTitle, { color: pdfNavy }]}>Descripción de Hoteles</Text>
             {hotelsList.map((h, idx) => {
-              const hotelTotals = totals.byHotel?.find((ht) => ht.hotelId === h.id);
+              const hotelTotals = totals.byHotel?.find((ht: any) => ht.hotelId === h.id);
               const totalStr = hotelTotals ? formatCurrencyLocal(hotelTotals.total) : "N/A";
 
               return (

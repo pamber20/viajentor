@@ -12,6 +12,7 @@ import {
   FileDown,
   FileText,
   Handshake,
+  Loader2,
   MapPin,
   Plane,
   Plus,
@@ -62,6 +63,11 @@ export function TripDrawer({
   const [activeTab, setActiveTab] = useState<
     "amortization" | "payments" | "passengers" | "supplierPayments" | "operations" | "vouchers"
   >("amortization");
+
+  // PDF Download States
+  const [downloadingBookingPdf, setDownloadingBookingPdf] = useState(false);
+  const [downloadingVoucherPdf, setDownloadingVoucherPdf] = useState(false);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null);
 
   // Payments
   const [payments, setPayments] = useState<TravelPaymentDto[]>([]);
@@ -436,12 +442,73 @@ export function TripDrawer({
     }
   }
 
-  /* Print / Download Payment Receipt */
+  /* PDF Handlers */
+  async function handleDownloadBookingPdf() {
+    try {
+      setDownloadingBookingPdf(true);
+      await downloadQuotePdf(quote, undefined, payments);
+    } catch (err) {
+      console.error("Error al generar PDF de reserva:", err);
+      alert("Hubo un error al generar el PDF de la reserva. Por favor intenta nuevamente.");
+    } finally {
+      setDownloadingBookingPdf(false);
+    }
+  }
+
   async function handlePrintReceipt(p: TravelPaymentDto) {
     try {
+      setDownloadingReceiptId(p.id);
       await downloadReceiptPdf(p, quote);
     } catch (err) {
       console.error("Error al generar recibo de caja PDF:", err);
+      alert("Hubo un error al generar el recibo de caja en PDF.");
+    } finally {
+      setDownloadingReceiptId(null);
+    }
+  }
+
+  async function handleDownloadVoucherPdf() {
+    if (!voucher) {
+      alert("Aún no se ha generado el voucher");
+      return;
+    }
+    try {
+      setDownloadingVoucherPdf(true);
+      const hotelItem = quote.days.flatMap((d) => d.items).find((i) => i.type === "Hotel");
+      const flightItem = quote.days.flatMap((d) => d.items).find((i) => i.type === "Flight");
+      await downloadVoucherPdf({
+        ...voucher,
+        travelers,
+        hotelDetails: hotelItem?.hotelDetails
+          ? {
+              name: hotelItem.hotelDetails.hotelName || hotelItem.title,
+              address: hotelItem.hotelDetails.address || "",
+              checkIn: hotelItem.hotelDetails.checkIn || quote.startDate || "",
+              checkOut: hotelItem.hotelDetails.checkOut || quote.endDate || "",
+              roomType: hotelItem.hotelDetails.roomType || "Standard",
+              mealPlan: hotelItem.hotelDetails.boardBasis || "No especificado",
+              confirmationNumber:
+                hotelItem.pnr || quote.bookingNumber || quote.quoteNumber,
+              reservationHolder: quote.clientName,
+            }
+          : voucher.hotelDetails,
+        flightDetails: flightItem?.flightDetails
+          ? {
+              airline: flightItem.flightDetails.airline,
+              flightNumber: flightItem.flightDetails.flightNumber,
+              departureCity: flightItem.flightDetails.origin,
+              arrivalCity: flightItem.flightDetails.destination,
+              departureDate: flightItem.flightDetails.departureDate,
+              departureTime: flightItem.flightDetails.departureTime,
+              pnr: flightItem.pnr || "---",
+            }
+          : voucher.flightDetails,
+      });
+    } catch (err) {
+      console.error("Error al descargar voucher PDF:", err);
+      alert("Hubo un error al generar el voucher en PDF.");
+    } finally {
+      setDownloadingVoucherPdf(false);
     }
   }
 
@@ -692,12 +759,17 @@ export function TripDrawer({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => void downloadQuotePdf(quote, undefined, payments)}
-                className="h-8 px-2.5 text-xs text-brand border-brand/30 hover:bg-brand-soft"
+                disabled={downloadingBookingPdf}
+                onClick={() => void handleDownloadBookingPdf()}
+                className="h-8 px-2.5 text-xs text-brand border-brand/30 hover:bg-brand-soft disabled:opacity-60"
                 title="Descargar Itinerario y Reserva en PDF"
               >
-                <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                PDF Reserva
+                {downloadingBookingPdf ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <FileDown className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {downloadingBookingPdf ? "Generando..." : "PDF Reserva"}
               </Button>
               <select
                 value={bookingStatus}
@@ -1206,12 +1278,19 @@ export function TripDrawer({
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="h-7 text-xs flex items-center gap-1"
-                          onClick={() => handlePrintReceipt(p)}
+                          disabled={downloadingReceiptId === p.id}
+                          className="h-7 text-xs flex items-center gap-1 disabled:opacity-60"
+                          onClick={() => void handlePrintReceipt(p)}
                           title="Descargar / Imprimir Recibo de Caja"
                         >
-                          <Printer className="h-3.5 w-3.5" />
-                          <span className="hidden sm:inline">Recibo</span>
+                          {downloadingReceiptId === p.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Printer className="h-3.5 w-3.5" />
+                          )}
+                          <span className="hidden sm:inline">
+                            {downloadingReceiptId === p.id ? "Generando..." : "Recibo"}
+                          </span>
                         </Button>
 
                         <button
@@ -1814,46 +1893,16 @@ export function TripDrawer({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {
-                      if (!voucher) {
-                        alert("Aún no se ha generado el voucher");
-                        return;
-                      }
-                      const hotelItem = quote.days.flatMap((d) => d.items).find((i) => i.type === "Hotel");
-                      const flightItem = quote.days.flatMap((d) => d.items).find((i) => i.type === "Flight");
-                      void downloadVoucherPdf({
-                        ...voucher,
-                        travelers,
-                        hotelDetails: hotelItem?.hotelDetails
-                          ? {
-                              name: hotelItem.hotelDetails.hotelName || hotelItem.title,
-                              address: hotelItem.hotelDetails.address || "",
-                              checkIn: hotelItem.hotelDetails.checkIn || quote.startDate || "",
-                              checkOut: hotelItem.hotelDetails.checkOut || quote.endDate || "",
-                              roomType: hotelItem.hotelDetails.roomType || "Standard",
-                              mealPlan: hotelItem.hotelDetails.boardBasis || "No especificado",
-                              confirmationNumber:
-                                hotelItem.pnr || quote.bookingNumber || quote.quoteNumber,
-                              reservationHolder: quote.clientName,
-                            }
-                          : voucher.hotelDetails,
-                        flightDetails: flightItem?.flightDetails
-                          ? {
-                              airline: flightItem.flightDetails.airline,
-                              flightNumber: flightItem.flightDetails.flightNumber,
-                              departureCity: flightItem.flightDetails.origin,
-                              arrivalCity: flightItem.flightDetails.destination,
-                              departureDate: flightItem.flightDetails.departureDate,
-                              departureTime: flightItem.flightDetails.departureTime,
-                              pnr: flightItem.pnr || "---",
-                            }
-                          : voucher.flightDetails,
-                      });
-                    }}
-                    className="h-8 text-xs text-brand border-brand/30 hover:bg-brand-soft"
+                    disabled={downloadingVoucherPdf}
+                    onClick={() => void handleDownloadVoucherPdf()}
+                    className="h-8 text-xs text-brand border-brand/30 hover:bg-brand-soft disabled:opacity-60"
                   >
-                    <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                    Descargar Voucher PDF
+                    {downloadingVoucherPdf ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <FileDown className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {downloadingVoucherPdf ? "Generando..." : "Descargar Voucher PDF"}
                   </Button>
                   <Button
                     size="sm"
