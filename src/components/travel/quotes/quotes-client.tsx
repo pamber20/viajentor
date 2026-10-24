@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Edit2,
   Eye,
+  FileDown,
   FileText,
   MapPin,
   Plus,
@@ -22,6 +23,7 @@ import type { TravelQuoteDto } from "@/server/travel/quotes";
 import { QuoteBuilder } from "./quote-builder";
 import { QuotePreviewModal } from "./quote-preview";
 import { ConvertQuoteModal } from "./convert-modal";
+import { downloadQuotePdf } from "@/components/travel/pdf";
 
 const DEFAULT_STATUS_CONFIG = { label: "Borrador", color: "bg-muted text-text-3 border-border" };
 
@@ -236,6 +238,16 @@ export function QuotesClient({
                       >
                         <Eye className="h-3.5 w-3.5 mr-1" />
                         Ver
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void downloadQuotePdf(q)}
+                        className="h-8 px-2 text-xs text-brand hover:bg-brand-soft"
+                        title="Descargar PDF"
+                      >
+                        <FileDown className="h-3.5 w-3.5 mr-1" />
+                        PDF
                       </Button>
                       <Button
                         size="sm"

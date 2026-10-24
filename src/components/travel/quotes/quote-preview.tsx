@@ -6,6 +6,7 @@ import {
   Check,
   CheckCircle,
   Copy,
+  FileDown,
   FileText,
   MapPin,
   Users,
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
 import { formatCurrency } from "@/lib/travel/pricing";
+import { downloadQuotePdf } from "@/components/travel/pdf";
 
 export function QuotePreviewModal({
   quote,
@@ -26,6 +28,18 @@ export function QuotePreviewModal({
   onConvert?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  async function handleDownloadPdf() {
+    try {
+      setDownloadingPdf(true);
+      await downloadQuotePdf(quote);
+    } catch (err) {
+      console.error("Error al descargar PDF:", err);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
 
   function generateWhatsAppSummary(): string {
     const lines = [
@@ -111,6 +125,10 @@ export function QuotePreviewModal({
           </div>
 
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={downloadingPdf} onClick={handleDownloadPdf}>
+              <FileDown className="mr-1.5 h-4 w-4 text-brand" />
+              {downloadingPdf ? "Generando…" : "Descargar PDF"}
+            </Button>
             <Button size="sm" variant="outline" onClick={handleCopy}>
               {copied ? (
                 <>

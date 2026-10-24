@@ -9,6 +9,7 @@ import {
   Copy,
   DollarSign,
   Edit2,
+  FileDown,
   FileText,
   Handshake,
   MapPin,
@@ -34,6 +35,11 @@ import type {
 import type { TravelQuoteDto } from "@/server/travel/quotes";
 import type { TravelPaymentDto, TravelVoucherDto } from "@/server/travel/trips";
 import { PaymentModal } from "./payment-modal";
+import {
+  downloadQuotePdf,
+  downloadReceiptPdf,
+  downloadVoucherPdf,
+} from "@/components/travel/pdf";
 
 const BOOKING_STATUSES: { value: BookingStatus; label: string; color: string }[] = [
   { value: "pending", label: "Pendiente de Reserva", color: "bg-warning-tint text-warning-text border-warning-soft" },
@@ -431,72 +437,12 @@ export function TripDrawer({
   }
 
   /* Print / Download Payment Receipt */
-  function handlePrintReceipt(p: TravelPaymentDto) {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Recibo de Caja - ${p.receiptNumber ?? "REC"}</title>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #1e293b; }
-          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 20px; }
-          .title { font-size: 24px; font-weight: 900; margin: 0; color: #0f172a; }
-          .badge { background: #dcfce7; color: #166534; padding: 4px 12px; border-radius: 9999px; font-weight: bold; font-size: 12px; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 30px 0; }
-          .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
-          .amount-box { background: #0f172a; color: white; padding: 20px; border-radius: 12px; text-align: center; margin: 30px 0; }
-          .amount { font-size: 36px; font-weight: 900; color: #f59e0b; margin: 5px 0; }
-          .footer { border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 11px; text-align: center; color: #64748b; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <h1 class="title">RECIBO DE CAJA</h1>
-            <p style="margin: 4px 0 0; color: #64748b;">Comprobante Oficial de Ingreso</p>
-          </div>
-          <div style="text-align: right;">
-            <span class="badge">PAGO APROBADO</span>
-            <p style="margin: 8px 0 0; font-family: monospace; font-weight: bold; font-size: 14px;">${p.receiptNumber ?? "REC"}</p>
-          </div>
-        </div>
-
-        <div class="grid">
-          <div class="card">
-            <h4 style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; color: #64748b;">Información del Cliente</h4>
-            <p style="margin: 0; font-size: 16px; font-weight: bold;">${quote.clientName}</p>
-            <p style="margin: 4px 0 0; font-size: 13px; color: #475569;">${quote.clientEmail || ""} · ${quote.clientPhone || ""}</p>
-            <p style="margin: 8px 0 0; font-size: 13px;"><strong>Destino:</strong> ${quote.destination}</p>
-            <p style="margin: 4px 0 0; font-size: 13px;"><strong>Reserva:</strong> ${quote.bookingNumber ?? quote.quoteNumber}</p>
-          </div>
-          <div class="card">
-            <h4 style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; color: #64748b;">Detalles del Abono</h4>
-            <p style="margin: 0; font-size: 13px;"><strong>Fecha:</strong> ${p.date}</p>
-            <p style="margin: 4px 0 0; font-size: 13px;"><strong>Método:</strong> ${p.method}</p>
-            ${p.reference ? `<p style="margin: 4px 0 0; font-size: 13px;"><strong>Referencia:</strong> ${p.reference}</p>` : ""}
-            ${p.notes ? `<p style="margin: 8px 0 0; font-size: 12px; font-style: italic; color: #64748b;">${p.notes}</p>` : ""}
-          </div>
-        </div>
-
-        <div class="amount-box">
-          <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8;">Monto Recibido</div>
-          <div class="amount">${formatCurrency(p.amount, quote.currency)}</div>
-          <div style="font-size: 12px; color: #cbd5e1;">Total Inversión Reserva: ${formatCurrency(quote.totals.finalTotal, quote.currency)}</div>
-        </div>
-
-        <div class="footer">
-          <p>Documento emitido electrónicamente por el sistema de reservas Vocero CRM / Viajentor.</p>
-        </div>
-        <script>
-          window.print();
-        </script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+  async function handlePrintReceipt(p: TravelPaymentDto) {
+    try {
+      await downloadReceiptPdf(p, quote);
+    } catch (err) {
+      console.error("Error al generar recibo de caja PDF:", err);
+    }
   }
 
   /* Travelers Management */
@@ -743,6 +689,16 @@ export function TripDrawer({
             </div>
 
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void downloadQuotePdf(quote, undefined, payments)}
+                className="h-8 px-2.5 text-xs text-brand border-brand/30 hover:bg-brand-soft"
+                title="Descargar Itinerario y Reserva en PDF"
+              >
+                <FileDown className="mr-1.5 h-3.5 w-3.5" />
+                PDF Reserva
+              </Button>
               <select
                 value={bookingStatus}
                 onChange={(e) => void handleStatusChange(e.target.value as BookingStatus)}
@@ -1855,6 +1811,50 @@ export function TripDrawer({
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (!voucher) {
+                        alert("Aún no se ha generado el voucher");
+                        return;
+                      }
+                      const hotelItem = quote.days.flatMap((d) => d.items).find((i) => i.type === "Hotel");
+                      const flightItem = quote.days.flatMap((d) => d.items).find((i) => i.type === "Flight");
+                      void downloadVoucherPdf({
+                        ...voucher,
+                        travelers,
+                        hotelDetails: hotelItem?.hotelDetails
+                          ? {
+                              name: hotelItem.hotelDetails.hotelName || hotelItem.title,
+                              address: hotelItem.hotelDetails.address || "",
+                              checkIn: hotelItem.hotelDetails.checkIn || quote.startDate || "",
+                              checkOut: hotelItem.hotelDetails.checkOut || quote.endDate || "",
+                              roomType: hotelItem.hotelDetails.roomType || "Standard",
+                              mealPlan: hotelItem.hotelDetails.boardBasis || "No especificado",
+                              confirmationNumber:
+                                hotelItem.pnr || quote.bookingNumber || quote.quoteNumber,
+                              reservationHolder: quote.clientName,
+                            }
+                          : voucher.hotelDetails,
+                        flightDetails: flightItem?.flightDetails
+                          ? {
+                              airline: flightItem.flightDetails.airline,
+                              flightNumber: flightItem.flightDetails.flightNumber,
+                              departureCity: flightItem.flightDetails.origin,
+                              arrivalCity: flightItem.flightDetails.destination,
+                              departureDate: flightItem.flightDetails.departureDate,
+                              departureTime: flightItem.flightDetails.departureTime,
+                              pnr: flightItem.pnr || "---",
+                            }
+                          : voucher.flightDetails,
+                      });
+                    }}
+                    className="h-8 text-xs text-brand border-brand/30 hover:bg-brand-soft"
+                  >
+                    <FileDown className="mr-1.5 h-3.5 w-3.5" />
+                    Descargar Voucher PDF
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
