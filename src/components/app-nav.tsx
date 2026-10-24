@@ -28,7 +28,7 @@ import {
  */
 export function navItemClass(active: boolean) {
   return cn(
-    "flex items-center gap-[10px] rounded-sm px-2.5 py-2.5 text-[13.5px] font-semibold transition-colors lg:py-2",
+    "flex items-center gap-[10px] rounded-sm px-2.5 py-2 text-[13.5px] font-semibold transition-colors",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
     active
       ? "bg-brand-tint text-brand-text"
@@ -122,7 +122,7 @@ export function AppNav({
           strokeWidth={1.8}
           aria-hidden
         />
-        <span className="flex-1">{item.label}</span>
+        <span className="flex-1 truncate">{item.label}</span>
         {item.badge && unread > 0 && (
           <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand px-1.5 text-[10.5px] font-bold text-brand-fg">
             {unread}
@@ -132,16 +132,19 @@ export function AppNav({
     );
   }
 
+  // Solo mostramos el selector si hay más de 1 agencia para alternar o si estamos en modo soporte
+  const showOrgSwitcher = accessibleOrganizations.length > 1 || impersonating;
+
   return (
     <aside
       className={cn(
-        "nav-dark fixed inset-y-0 left-0 z-50 flex w-[17rem] shrink-0 flex-col overflow-y-auto border-r bg-subtle px-3 pb-3.5 pt-4 text-foreground transition-[transform,visibility] duration-200",
-        "lg:static lg:visible lg:z-auto lg:w-56 lg:translate-x-0 lg:overflow-visible lg:transition-none",
+        "nav-dark fixed inset-y-0 left-0 z-50 flex h-dvh w-[17rem] shrink-0 flex-col border-r bg-subtle px-3 pb-3 pt-3.5 text-foreground transition-[transform,visibility] duration-200",
+        "lg:static lg:visible lg:z-auto lg:h-full lg:w-56 lg:translate-x-0 lg:transition-none",
         open ? "visible translate-x-0 shadow-pop" : "invisible -translate-x-full"
       )}
     >
-      {/* Marca: el logo de Vocero o, white-label, la inicial y el nombre */}
-      <div className="mb-4 flex items-start gap-1.5 px-2 pt-0.5">
+      {/* Header fijo: Marca y botón de cerrar en móvil */}
+      <div className="shrink-0 mb-3 flex items-start gap-1.5 px-2 pt-0.5">
         <button
           onClick={onClose}
           aria-label="Cerrar el menú"
@@ -151,19 +154,19 @@ export function AppNav({
         </button>
         <div className="min-w-0 flex-1">
           <BrandLogo branding={branding} />
-          <span className="kicker mt-2 block">{kicker}</span>
+          <span className="kicker mt-1.5 block">{kicker}</span>
         </div>
       </div>
 
-      {/* Selector rápido de Agencia (Multi-Tenant Viajentor 2.0) */}
-      {(accessibleOrganizations.length > 1 || superAdmin) && (
-        <div className="mb-4 px-2">
+      {/* Selector de Agencia Activa (solo visible si hay múltiples agencias o modo soporte) */}
+      {showOrgSwitcher && (
+        <div className="shrink-0 mb-3 px-1">
           <label
             htmlFor="active-tenant-select"
-            className="mb-1 flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wider text-text-3"
+            className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-3"
           >
             <Building2 className="h-3 w-3 shrink-0" />
-            <span>Agencia activa ({accessibleOrganizations.length})</span>
+            <span>Agencia ({accessibleOrganizations.length})</span>
           </label>
           <select
             id="active-tenant-select"
@@ -189,8 +192,11 @@ export function AppNav({
         </div>
       )}
 
-      {/* Grupos con encabezado pequeño, sin letras ni colapsables */}
-      <nav className="flex flex-col gap-4" aria-label="Secciones">
+      {/* Menú de secciones central con scroll independiente si la pantalla es reducida */}
+      <nav
+        className="flex-1 min-h-0 overflow-y-auto space-y-3.5 pr-1 scrollbar-thin"
+        aria-label="Secciones"
+      >
         {groups.map((group, i) => (
           <div key={group.title ?? i} className="flex flex-col gap-0.5">
             {group.title && (
@@ -203,57 +209,57 @@ export function AppNav({
         ))}
       </nav>
 
-      <div className="flex-1" />
+      {/* Pie inferior FIJO: Ajustes, Usuario, Logout y Versión siempre visibles */}
+      <div className="shrink-0 mt-2 border-t border-border/30 pt-2 flex flex-col gap-1">
+        {renderItem(SETTINGS_ITEM)}
 
-      {/* Ajustes va abajo, solo: no es trabajo del día. */}
-      {renderItem(SETTINGS_ITEM)}
-
-      <div className="mt-1 flex items-center gap-2.5 rounded-sm px-2.5 py-2 hover:bg-accent">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand-text">
-          {initials(userName)}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold">{userName}</span>
-          <span className="block truncate text-[11px] text-text-3">
-            {superAdmin
-              ? "SuperAdmin"
-              : role === "owner"
-                ? "Propietario"
-                : "Equipo"}{" "}
-            · En línea
+        <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand-text">
+            {initials(userName)}
           </span>
-        </span>
-        <ThemeToggle initial={theme} />
-        <button
-          aria-label="Cerrar sesión"
-          title="Cerrar sesión"
-          className="rounded p-1 text-text-3 hover:text-foreground"
-          onClick={async () => {
-            await signOut();
-            router.push("/login");
-            router.refresh();
-          }}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[12.5px] font-semibold">{userName}</span>
+            <span className="block truncate text-[10.5px] text-text-3">
+              {superAdmin
+                ? "SuperAdmin"
+                : role === "owner"
+                  ? "Propietario"
+                  : "Equipo"}{" "}
+              · En línea
+            </span>
+          </span>
+          <ThemeToggle initial={theme} />
+          <button
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+            className="rounded p-1 text-text-3 hover:text-foreground"
+            onClick={async () => {
+              await signOut();
+              router.push("/login");
+              router.refresh();
+            }}
+          >
+            <LogOut className="h-4 w-4" strokeWidth={1.7} />
+          </button>
+        </div>
+
+        <p
+          className="px-2 font-mono text-[10px] tracking-[0.06em] text-text-2"
+          title={versionTitle(branding.name, version)}
         >
-          <LogOut className="h-4 w-4" strokeWidth={1.7} />
-        </button>
+          {versionLabel(version.commit)}
+          {version.commit && !version.verified && (
+            <span className="mt-0.5 flex items-center gap-1">
+              <AlertTriangle
+                className="h-3 w-3 shrink-0 text-warning-text"
+                strokeWidth={2}
+                aria-hidden
+              />
+              {UNVERIFIED_COMMIT_NOTE}
+            </span>
+          )}
+        </p>
       </div>
-
-      <p
-        className="mt-2 px-2.5 font-mono text-[10.5px] tracking-[0.06em] text-text-2"
-        title={versionTitle(branding.name, version)}
-      >
-        {versionLabel(version.commit)}
-        {version.commit && !version.verified && (
-          <span className="mt-0.5 flex items-center gap-1">
-            <AlertTriangle
-              className="h-3 w-3 shrink-0 text-warning-text"
-              strokeWidth={2}
-              aria-hidden
-            />
-            {UNVERIFIED_COMMIT_NOTE}
-          </span>
-        )}
-      </p>
     </aside>
   );
 }
