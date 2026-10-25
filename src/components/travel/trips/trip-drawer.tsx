@@ -41,8 +41,7 @@ import {
   downloadReceiptPdf,
   downloadVoucherPdf,
 } from "@/components/travel/pdf";
-import { VoucherEditModal } from "./voucher-edit-modal";
-import { Edit3 } from "lucide-react";
+import { VoucherEditorPanel } from "./voucher-editor-panel";
 
 const BOOKING_STATUSES: { value: BookingStatus; label: string; color: string }[] = [
   { value: "pending", label: "Pendiente de Reserva", color: "bg-warning-tint text-warning-text border-warning-soft" },
@@ -97,7 +96,6 @@ export function TripDrawer({
   // Voucher
   const [voucher, setVoucher] = useState<TravelVoucherDto | null>(null);
   const [savingVoucher, setSavingVoucher] = useState(false);
-  const [isEditingVoucher, setIsEditingVoucher] = useState(false);
 
   // Billing and Counter
   const [billingName, setBillingName] = useState(quote.billingName ?? "");
@@ -1880,102 +1878,18 @@ export function TripDrawer({
             </div>
           )}
 
-          {/* 6. Vouchers */}
+          {/* 6. Vouchers (Editor Fino Integrado In-line) */}
           {activeTab === "vouchers" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <div>
-                  <h3 className="font-bold text-sm text-foreground">
-                    Voucher Turístico de Servicios
-                  </h3>
-                  <p className="text-xs text-text-3">
-                    Documento oficial para presentar ante hoteles, traslados y tours.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => setIsEditingVoucher(true)}
-                    className="h-8 text-xs font-bold gap-1.5 bg-brand text-brand-foreground hover:bg-brand-hover shadow-sm"
-                  >
-                    <Edit3 className="h-3.5 w-3.5" />
-                    Personalizar / Editar Voucher
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={downloadingVoucherPdf}
-                    onClick={() => void handleDownloadVoucherPdf()}
-                    className="h-8 text-xs text-brand border-brand/30 hover:bg-brand-soft disabled:opacity-60"
-                  >
-                    {downloadingVoucherPdf ? (
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                    )}
-                    {downloadingVoucherPdf ? "Generando..." : "Descargar Voucher PDF"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleCopyVoucherText}
-                    className="h-8 text-xs"
-                  >
-                    <Copy className="mr-1.5 h-3.5 w-3.5" />
-                    Copiar para WhatsApp
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleSaveVoucher}
-                    disabled={savingVoucher}
-                    className="h-8 text-xs"
-                  >
-                    {savingVoucher ? "Guardando…" : "Actualizar Voucher"}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="rounded-xl border bg-card p-4 space-y-3">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <span className="font-mono text-xs font-bold text-brand">
-                    {voucher?.voucherNumber ?? "Voucher en borrador"}
-                  </span>
-                  <span className="text-xs text-text-3">
-                    Destino: {quote.destination}
-                  </span>
-                </div>
-
-                <div className="text-xs space-y-2">
-                  <p className="font-semibold text-foreground">Servicios confirmados:</p>
-                  {quote.days.map((d) => (
-                    <div key={d.id} className="pl-2 border-l-2 border-brand/30 space-y-1">
-                      <span className="font-bold text-brand text-[11px]">Día {d.dayNumber}:</span>
-                      {d.items.map((it) => (
-                        <div key={it.id} className="text-text-2">
-                          • [{it.type}] <strong>{it.title}</strong>{" "}
-                          {it.pnr ? `(Localizador: ${it.pnr})` : ""}{" "}
-                          {it.description ? `- ${it.description}` : ""}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="pt-2 border-t space-y-1">
-                  <label className="text-xs font-semibold text-text-2">
-                    Información adicional / Instrucciones para el pasajero
-                  </label>
-                  <Textarea
-                    rows={3}
-                    value={voucher?.additionalInfo ?? ""}
-                    onChange={(e) =>
-                      setVoucher((prev) => (prev ? { ...prev, additionalInfo: e.target.value } : null))
-                    }
-                    placeholder="El chofer llevará un cartel con su nombre en la puerta 4..."
-                  />
-                </div>
-              </div>
-            </div>
+            <VoucherEditorPanel
+              quote={quote}
+              initialVoucher={voucher}
+              onSaved={(updatedVoucher) => {
+                setVoucher(updatedVoucher);
+              }}
+              onDownloadPdf={() => void handleDownloadVoucherPdf()}
+              isDownloadingPdf={downloadingVoucherPdf}
+              onCopyWhatsApp={handleCopyVoucherText}
+            />
           )}
         </div>
       </div>
@@ -1991,19 +1905,6 @@ export function TripDrawer({
           onSaved={() => {
             void loadPayments();
             setPaymentModalOpen(false);
-          }}
-        />
-      )}
-
-      {isEditingVoucher && (
-        <VoucherEditModal
-          isOpen={isEditingVoucher}
-          quote={quote}
-          initialVoucher={voucher}
-          onClose={() => setIsEditingVoucher(false)}
-          onSaved={(updatedVoucher) => {
-            setVoucher(updatedVoucher);
-            setIsEditingVoucher(false);
           }}
         />
       )}
