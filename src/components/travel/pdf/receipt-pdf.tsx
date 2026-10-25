@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, jsx-a11y/alt-text */
+/* eslint-disable jsx-a11y/alt-text */
 import React from "react";
 import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import type { PdfAgencyInfo } from "./types";

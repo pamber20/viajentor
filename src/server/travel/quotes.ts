@@ -76,6 +76,7 @@ export interface TravelQuoteDto {
   counterName: string | null;
   advisorName: string | null;
   observations: string | null;
+  quoteDate: string | null;
   totals: ReturnType<typeof calculateDetailedQuoteTotals>;
   createdAt: string;
   updatedAt: string;
@@ -162,6 +163,7 @@ export function serializeQuote(row: QuoteRow): TravelQuoteDto {
     counterName: row.counterName,
     advisorName: row.advisorName,
     observations: row.observations,
+    quoteDate: row.quoteDate ?? null,
     totals,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -333,6 +335,7 @@ export type CreateQuoteInput = {
   counterName?: string | null;
   advisorName?: string | null;
   observations?: string | null;
+  quoteDate?: string | null;
 };
 
 export async function createQuote(input: CreateQuoteInput): Promise<TravelQuoteDto> {
@@ -418,6 +421,7 @@ export async function createQuote(input: CreateQuoteInput): Promise<TravelQuoteD
       counterName: input.counterName ?? null,
       advisorName: input.advisorName ?? null,
       observations: input.observations ?? null,
+      quoteDate: input.quoteDate?.trim() ?? null,
     })
     .returning();
 
@@ -482,6 +486,7 @@ export type UpdateQuoteInput = {
   counterName?: string | null;
   advisorName?: string | null;
   observations?: string | null;
+  quoteDate?: string | null;
 };
 
 export async function updateQuote(input: UpdateQuoteInput): Promise<TravelQuoteDto | null> {
@@ -542,6 +547,7 @@ export async function updateQuote(input: UpdateQuoteInput): Promise<TravelQuoteD
   if (input.counterName !== undefined) patch.counterName = input.counterName;
   if (input.advisorName !== undefined) patch.advisorName = input.advisorName;
   if (input.observations !== undefined) patch.observations = input.observations;
+  if (input.quoteDate !== undefined) patch.quoteDate = input.quoteDate ? input.quoteDate.trim() : null;
 
   const [updated] = await db
     .update(schema.travelQuote)

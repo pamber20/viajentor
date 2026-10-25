@@ -1409,6 +1409,7 @@ export const travelQuote = pgTable(
     counterName: text("counter_name"),
     advisorName: text("advisor_name"),
     observations: text("observations"),
+    quoteDate: text("quote_date"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

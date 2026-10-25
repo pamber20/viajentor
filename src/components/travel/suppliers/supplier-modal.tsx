@@ -22,17 +22,25 @@ const SUPPLIER_TYPES: { value: TravelSupplierType; label: string }[] = [
 
 export function SupplierModal({
   supplier,
+  defaultType,
+  defaultCity,
+  defaultName,
   onClose,
   onSaved,
 }: {
   supplier?: TravelSupplier | null;
+  defaultType?: TravelSupplierType;
+  defaultCity?: string;
+  defaultName?: string;
   onClose: () => void;
   onSaved: (supplier: TravelSupplier) => void;
 }) {
   const isEditing = !!supplier;
 
-  const [name, setName] = useState(supplier?.name ?? "");
-  const [type, setType] = useState<TravelSupplierType>(supplier?.type ?? "hotel");
+  const [name, setName] = useState(supplier?.name ?? defaultName ?? "");
+  const [type, setType] = useState<TravelSupplierType>(
+    supplier?.type ?? defaultType ?? "hotel"
+  );
   const [contactName, setContactName] = useState(supplier?.contact?.name ?? "");
   const [contactEmail, setContactEmail] = useState(supplier?.contact?.email ?? "");
   const [contactPhone, setContactPhone] = useState(supplier?.contact?.phone ?? "");
@@ -44,7 +52,7 @@ export function SupplierModal({
   const [notes, setNotes] = useState(supplier?.notes ?? "");
   const [active, setActive] = useState(supplier?.active ?? true);
   const [citiesInput, setCitiesInput] = useState(
-    supplier?.operatingCities?.join(", ") ?? ""
+    supplier?.operatingCities?.join(", ") ?? defaultCity ?? ""
   );
 
   // Hotel Meta

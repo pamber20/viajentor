@@ -1,0 +1,1 @@
+ALTER TABLE "travel_quote" ADD COLUMN "quote_date" text;

@@ -36,11 +36,53 @@ import type {
   TravelInstallment,
   TravelItemType,
   TravelItineraryItem,
+  TravelSupplierType,
 } from "@/lib/travel/types";
 import { SupplierCombobox } from "@/components/travel/suppliers/supplier-combobox";
 import { CITY_AIRPORT_MAP } from "@/hooks/useAirlines";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
 
+export interface AirportItem {
+  city: string;
+  region: string;
+  airport: string;
+  code: string;
+}
+
+interface TravelPayoutsItem {
+  name?: string;
+  city_name?: string;
+  country_name?: string;
+  type?: string;
+  code?: string;
+}
+
+export const AIRPORT_DATA: AirportItem[] = [
+  { city: "Montería", region: "Córdoba, Colombia", airport: "Los Garzones", code: "MTR" },
+  { city: "Sincelejo", region: "Colombia (apto. de Montería - 118km)", airport: "Los Garzones", code: "MTR" },
+  { city: "Bogotá", region: "Cundinamarca, Colombia", airport: "El Dorado", code: "BOG" },
+  { city: "Medellín", region: "Antioquia, Colombia", airport: "José María Córdova", code: "MDE" },
+  { city: "Cali", region: "Valle del Cauca, Colombia", airport: "Alfonso Bonilla Aragón", code: "CLO" },
+  { city: "Cartagena", region: "Bolívar, Colombia", airport: "Rafael Núñez", code: "CTG" },
+  { city: "Santa Marta", region: "Magdalena, Colombia", airport: "Simón Bolívar", code: "SMR" },
+  { city: "San Andrés", region: "Archipiélago, Colombia", airport: "Gustavo Rojas Pinilla", code: "ADZ" },
+  { city: "Pereira", region: "Risaralda, Colombia", airport: "Matecaña", code: "PEI" },
+  { city: "Barranquilla", region: "Atlántico, Colombia", airport: "Ernesto Cortissoz", code: "BAQ" },
+  { city: "Bucaramanga", region: "Santander, Colombia", airport: "Palonegro", code: "BGA" },
+  { city: "Cúcuta", region: "Norte de Santander, Colombia", airport: "Camilo Daza", code: "CUC" },
+  { city: "Armenia", region: "Quindío, Colombia", airport: "El Edén", code: "AXM" },
+  { city: "Cancún", region: "Quintana Roo, México", airport: "Cancún International", code: "CUN" },
+  { city: "Punta Cana", region: "Rep. Dominicana", airport: "Punta Cana International", code: "PUJ" },
+  { city: "Miami", region: "Florida, EE.UU.", airport: "Miami International", code: "MIA" },
+  { city: "Orlando", region: "Florida, EE.UU.", airport: "Orlando International", code: "MCO" },
+  { city: "Panamá", region: "Panamá", airport: "Tocumen International", code: "PTY" },
+  { city: "Madrid", region: "España", airport: "Adolfo Suárez Madrid–Barajas", code: "MAD" },
+  { city: "París", region: "Francia", airport: "Charles de Gaulle", code: "CDG" },
+  { city: "Nueva York", region: "Nueva York, EE.UU.", airport: "John F. Kennedy", code: "JFK" },
+  { city: "Buenos Aires", region: "Argentina", airport: "Ezeiza", code: "EZE" },
+  { city: "Lima", region: "Perú", airport: "Jorge Chávez", code: "LIM" },
+  { city: "Ciudad de México", region: "México", airport: "Benito Juárez", code: "MEX" },
+];
 
 const PREFERENCES = [
   { id: "adultsOnly", label: "Solo Adultos" },
@@ -64,22 +106,22 @@ const DESTINATION_TEMPLATES = [
   { name: "Santa Marta", country: "Colombia" },
 ];
 
-const AIRPORT_SUGGESTIONS = [
-  { city: "Bogotá", region: "Colombia", airport: "El Dorado", code: "BOG" },
-  { city: "Medellín", region: "Colombia", airport: "José María Córdova", code: "MDE" },
-  { city: "Cali", region: "Colombia", airport: "Alfonso Bonilla Aragón", code: "CLO" },
-  { city: "Cartagena", region: "Colombia", airport: "Rafael Núñez", code: "CTG" },
-  { city: "Santa Marta", region: "Colombia", airport: "Simón Bolívar", code: "SMR" },
-  { city: "San Andrés", region: "Colombia", airport: "Gustavo Rojas Pinilla", code: "ADZ" },
-  { city: "Barranquilla", region: "Colombia", airport: "Ernesto Cortissoz", code: "BAQ" },
-  { city: "Pereira", region: "Colombia", airport: "Matecaña", code: "PEI" },
-  { city: "Cancún", region: "México", airport: "Cancún Intl", code: "CUN" },
-  { city: "Punta Cana", region: "Rep. Dominicana", airport: "Punta Cana Intl", code: "PUJ" },
-  { city: "Miami", region: "EE.UU.", airport: "Miami Intl", code: "MIA" },
-  { city: "Madrid", region: "España", airport: "Barajas", code: "MAD" },
-  { city: "París", region: "Francia", airport: "Charles de Gaulle", code: "CDG" },
-  { city: "Panamá", region: "Panamá", airport: "Tocumen", code: "PTY" },
-];
+function mapItemTypeToSupplier(type: string): TravelSupplierType {
+  switch (type) {
+    case "Flight":
+      return "airline";
+    case "Hotel":
+      return "hotel";
+    case "Transfer":
+      return "transport";
+    case "Activity":
+      return "operator";
+    case "Insurance":
+      return "insurance";
+    default:
+      return "other";
+  }
+}
 
 export function QuoteBuilder({
   initialQuote,
@@ -118,6 +160,9 @@ export function QuoteBuilder({
     initialQuote?.childPassengers ?? 0
   );
   const [travelReason, setTravelReason] = useState(initialQuote?.travelReason ?? "");
+  const [quoteDate, setQuoteDate] = useState(
+    initialQuote?.quoteDate ?? new Date().toISOString().split("T")[0]
+  );
 
   // Financial Config
   const [currency, setCurrency] = useState<TravelCurrency>(
@@ -191,6 +236,110 @@ export function QuoteBuilder({
 
   const [showOriginSuggs, setShowOriginSuggs] = useState(false);
   const [showDestSuggs, setShowDestSuggs] = useState(false);
+  const [originSuggestions, setOriginSuggestions] = useState<AirportItem[]>(
+    AIRPORT_DATA.slice(0, 6)
+  );
+  const [destSuggestions, setDestSuggestions] = useState<AirportItem[]>(
+    AIRPORT_DATA.slice(0, 6)
+  );
+  const [isSearchingOrigin, setIsSearchingOrigin] = useState(false);
+  const [isSearchingDest, setIsSearchingDest] = useState(false);
+
+  useEffect(() => {
+    if (!originCity || originCity.trim().length < 2) {
+      setOriginSuggestions(AIRPORT_DATA.slice(0, 6));
+      return;
+    }
+    const term = originCity.trim();
+    const timer = setTimeout(async () => {
+      setIsSearchingOrigin(true);
+      try {
+        const res = await fetch(
+          `https://autocomplete.travelpayouts.com/places2?term=${encodeURIComponent(
+            term
+          )}&locale=es&types[]=airport&types[]=city`
+        );
+        if (res.ok) {
+          const data = (await res.json()) as TravelPayoutsItem[];
+          if (Array.isArray(data) && data.length > 0) {
+            const mapped: AirportItem[] = data.map((item) => ({
+              city: item.city_name || item.name || "",
+              region: item.country_name || "",
+              airport: item.type === "airport" ? item.name || "" : "Todos los aeropuertos",
+              code: item.code || "",
+            }));
+            setOriginSuggestions(mapped.slice(0, 8));
+            return;
+          }
+        }
+      } catch {
+        // Fallback local en caso de error de red
+      } finally {
+        setIsSearchingOrigin(false);
+      }
+      const q = term.toLowerCase();
+      const local = AIRPORT_DATA.filter(
+        (a) =>
+          a.city.toLowerCase().includes(q) ||
+          a.airport.toLowerCase().includes(q) ||
+          a.code.toLowerCase().includes(q) ||
+          a.region.toLowerCase().includes(q)
+      );
+      setOriginSuggestions(
+        local.length > 0 ? local.slice(0, 8) : AIRPORT_DATA.slice(0, 6)
+      );
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [originCity]);
+
+  useEffect(() => {
+    if (!destination || destination.trim().length < 2) {
+      setDestSuggestions(AIRPORT_DATA.slice(0, 6));
+      return;
+    }
+    const term = destination.trim();
+    const timer = setTimeout(async () => {
+      setIsSearchingDest(true);
+      try {
+        const res = await fetch(
+          `https://autocomplete.travelpayouts.com/places2?term=${encodeURIComponent(
+            term
+          )}&locale=es&types[]=airport&types[]=city`
+        );
+        if (res.ok) {
+          const data = (await res.json()) as TravelPayoutsItem[];
+          if (Array.isArray(data) && data.length > 0) {
+            const mapped: AirportItem[] = data.map((item) => ({
+              city: item.city_name || item.name || "",
+              region: item.country_name || "",
+              airport: item.type === "airport" ? item.name || "" : "Todos los aeropuertos",
+              code: item.code || "",
+            }));
+            setDestSuggestions(mapped.slice(0, 8));
+            return;
+          }
+        }
+      } catch {
+        // Fallback local en caso de error de red
+      } finally {
+        setIsSearchingDest(false);
+      }
+      const q = term.toLowerCase();
+      const local = AIRPORT_DATA.filter(
+        (a) =>
+          a.city.toLowerCase().includes(q) ||
+          a.airport.toLowerCase().includes(q) ||
+          a.code.toLowerCase().includes(q) ||
+          a.region.toLowerCase().includes(q)
+      );
+      setDestSuggestions(
+        local.length > 0 ? local.slice(0, 8) : AIRPORT_DATA.slice(0, 6)
+      );
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [destination]);
 
   const allCollapsed = !showClient && !showTrip && !showPreferences && !showItinerary && !showInclusions && !showFinancial;
 
@@ -736,6 +885,7 @@ export function QuoteBuilder({
       flexibility: flexibility.trim() || null,
       preferences,
       advisorName: advisorName.trim() || null,
+      quoteDate: quoteDate || null,
       currency,
       exchangeRate: Number(exchangeRate) || 1,
       markupPercentage: Number(markupPercentage) || 15,
@@ -922,6 +1072,14 @@ export function QuoteBuilder({
                     placeholder="Nombre del asesor"
                   />
                 </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Fecha de Cotización</label>
+                  <Input
+                    type="date"
+                    value={quoteDate}
+                    onChange={(e) => setQuoteDate(e.target.value)}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -1001,42 +1159,63 @@ export function QuoteBuilder({
                   </button>
                 </div>
 
-                {/* Origen y Destino con Sugerencias y Botón de Swap */}
-                <div className="flex flex-col sm:flex-row items-center gap-2">
+                {/* Origen y Destino con Sugerencias en Vivo y Botón de Swap */}
+                <div className="flex flex-col sm:flex-row items-start gap-2">
                   {/* Origen */}
                   <div className="relative space-y-1 flex-1 w-full">
                     <label className="text-xs font-semibold text-text-2">Ciudad o Aeropuerto de Origen</label>
                     <Input
                       value={originCity}
-                      onChange={(e) => setOriginCity(e.target.value)}
+                      onChange={(e) => {
+                        setOriginCity(e.target.value);
+                        setShowOriginSuggs(true);
+                      }}
                       onFocus={() => setShowOriginSuggs(true)}
                       placeholder="Ej. Bogotá (BOG)"
                     />
+                    {departureAirport && !showOriginSuggs && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium px-1 pt-0.5">
+                        <span>🛫 Aeropuerto salida:</span>
+                        <span className="font-semibold">{departureAirport}</span>
+                      </div>
+                    )}
                     {showOriginSuggs && (
-                      <div className="absolute top-full left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg">
-                        <div className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-text-3 border-b">
-                          <span>Sugerencias de Aeropuertos</span>
+                      <div className="absolute top-full left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-xl border bg-popover p-1.5 shadow-xl animate-in fade-in slide-in-from-top-1">
+                        <div className="flex items-center justify-between px-2.5 py-1 text-[11px] font-bold text-text-3 border-b mb-1">
+                          <span>{isSearchingOrigin ? "Buscando aeropuertos..." : "Aeropuertos de Origen"}</span>
                           <button
                             type="button"
                             onClick={() => setShowOriginSuggs(false)}
-                            className="text-text-3 hover:text-foreground"
+                            className="text-text-3 hover:text-foreground text-xs"
                           >
                             ✕
                           </button>
                         </div>
-                        {AIRPORT_SUGGESTIONS.map((a) => (
+                        {originSuggestions.map((a, idx) => (
                           <button
-                            key={a.code + a.city}
+                            key={`${a.code}-${a.city}-${idx}-origin`}
                             type="button"
                             onClick={() => {
                               setOriginCity(a.city);
                               setDepartureAirport(`${a.airport} (${a.code})`);
                               setShowOriginSuggs(false);
                             }}
-                            className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs hover:bg-muted rounded transition"
+                            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-muted/80 rounded-lg transition group"
                           >
-                            <span className="font-semibold text-foreground">{a.city}</span>
-                            <span className="text-[11px] font-mono text-text-3">{a.airport} ({a.code})</span>
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="font-bold text-foreground text-sm group-hover:text-brand transition-colors">
+                                {a.city}
+                              </span>
+                              <span className="text-[11px] text-text-3 truncate">{a.region}</span>
+                            </div>
+                            <div className="flex flex-col items-end shrink-0 text-right">
+                              <span className="font-mono text-xs font-bold text-brand bg-brand/10 px-1.5 py-0.5 rounded">
+                                {a.code}
+                              </span>
+                              <span className="text-[10px] text-text-3 truncate max-w-[130px] mt-0.5">
+                                {a.airport}
+                              </span>
+                            </div>
                           </button>
                         ))}
                       </div>
@@ -1060,36 +1239,58 @@ export function QuoteBuilder({
                     <label className="text-xs font-semibold text-text-2">Ciudad o Destino Turístico *</label>
                     <Input
                       value={destination}
-                      onChange={(e) => setDestination(e.target.value)}
+                      onChange={(e) => {
+                        setDestination(e.target.value);
+                        setShowDestSuggs(true);
+                      }}
                       onFocus={() => setShowDestSuggs(true)}
                       placeholder="Ej. Cancún, Madrid..."
                       required
                     />
+                    {arrivalAirport && !showDestSuggs && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium px-1 pt-0.5">
+                        <span>✈️ Aeropuerto llegada:</span>
+                        <span className="font-semibold">{arrivalAirport}</span>
+                      </div>
+                    )}
                     {showDestSuggs && (
-                      <div className="absolute top-full left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg">
-                        <div className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-text-3 border-b">
-                          <span>Destinos y Aeropuertos</span>
+                      <div className="absolute top-full left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-xl border bg-popover p-1.5 shadow-xl animate-in fade-in slide-in-from-top-1">
+                        <div className="flex items-center justify-between px-2.5 py-1 text-[11px] font-bold text-text-3 border-b mb-1">
+                          <span>{isSearchingDest ? "Buscando destinos..." : "Ciudades y Aeropuertos"}</span>
                           <button
                             type="button"
                             onClick={() => setShowDestSuggs(false)}
-                            className="text-text-3 hover:text-foreground"
+                            className="text-text-3 hover:text-foreground text-xs"
                           >
                             ✕
                           </button>
                         </div>
-                        {AIRPORT_SUGGESTIONS.map((a) => (
+                        {destSuggestions.map((a, idx) => (
                           <button
-                            key={a.code + a.city + "dest"}
+                            key={`${a.code}-${a.city}-${idx}-dest`}
                             type="button"
                             onClick={() => {
-                              applyDestinationTemplate(a.city);
+                              setDestination(a.city);
                               setArrivalAirport(`${a.airport} (${a.code})`);
                               setShowDestSuggs(false);
+                              applyDestinationTemplate(a.city);
                             }}
-                            className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs hover:bg-muted rounded transition"
+                            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-muted/80 rounded-lg transition group"
                           >
-                            <span className="font-semibold text-foreground">{a.city}</span>
-                            <span className="text-[11px] font-mono text-text-3">{a.airport} ({a.code})</span>
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="font-bold text-foreground text-sm group-hover:text-brand transition-colors">
+                                {a.city}
+                              </span>
+                              <span className="text-[11px] text-text-3 truncate">{a.region}</span>
+                            </div>
+                            <div className="flex flex-col items-end shrink-0 text-right">
+                              <span className="font-mono text-xs font-bold text-brand bg-brand/10 px-1.5 py-0.5 rounded">
+                                {a.code}
+                              </span>
+                              <span className="text-[10px] text-text-3 truncate max-w-[130px] mt-0.5">
+                                {a.airport}
+                              </span>
+                            </div>
                           </button>
                         ))}
                       </div>
@@ -1524,10 +1725,12 @@ export function QuoteBuilder({
                                 className="w-full text-xs font-semibold h-8"
                               />
 
-                              {/* Fila 3: Buscador de Proveedor Aliado */}
+                              {/* Fila 3: Buscador de Proveedor Aliado filtrado por Tipo y Ciudad */}
                               <div>
                                 <SupplierCombobox
                                   value={it.provider || ""}
+                                  type={mapItemTypeToSupplier(it.type)}
+                                  destinationCity={destination}
                                   onChange={(provName, selectedSup) => {
                                     if (it.type === "Hotel") {
                                       updateItem(day.id, it.id, {

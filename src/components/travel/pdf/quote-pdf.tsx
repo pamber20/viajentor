@@ -557,7 +557,7 @@ export function QuotePDF({ quote, agency, totals: passedTotals, currentUser, pay
   };
 
   const expirationDate = () => {
-    const d = safeDate(quote.createdAt);
+    const d = safeDate(quote.quoteDate || quote.createdAt);
     if (!d) return "Por definir";
     return new Date(d.getTime() + (quote.validityHours || 48) * 60 * 60 * 1000).toLocaleDateString(
       "es-ES",
@@ -752,7 +752,9 @@ export function QuotePDF({ quote, agency, totals: passedTotals, currentUser, pay
             </View>
             <View style={styles.gridCol}>
               <Text style={styles.label}>Fecha Elaboración</Text>
-              <Text style={[styles.value, { color: pdfTextPrimary }]}>{formatDate(quote.createdAt)}</Text>
+              <Text style={[styles.value, { color: pdfTextPrimary }]}>
+                {formatDate(quote.quoteDate || quote.createdAt)}
+              </Text>
             </View>
             <View style={styles.gridCol}>
               <Text style={styles.label}>Límite {quote.isBooking ? "Pago" : "Validez"}</Text>

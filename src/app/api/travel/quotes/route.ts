@@ -116,6 +116,7 @@ const createQuoteSchema = z.object({
   counterName: z.string().optional().nullable(),
   advisorName: z.string().optional().nullable(),
   observations: z.string().optional().nullable(),
+  quoteDate: z.string().optional().nullable(),
 });
 
 export const GET = withAuth(async (session, req: Request) => {

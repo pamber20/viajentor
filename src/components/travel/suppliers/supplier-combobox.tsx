@@ -9,6 +9,7 @@ import { SupplierModal } from "./supplier-modal";
 interface SupplierComboboxProps {
   value?: string;
   type?: TravelSupplierType | "all";
+  destinationCity?: string;
   onChange: (supplierName: string, supplier?: TravelSupplier) => void;
   placeholder?: string;
   className?: string;
@@ -17,6 +18,7 @@ interface SupplierComboboxProps {
 export function SupplierCombobox({
   value,
   type = "all",
+  destinationCity,
   onChange,
   placeholder = "Seleccionar o escribir proveedor...",
   className = "",
@@ -41,9 +43,27 @@ export function SupplierCombobox({
     })();
   }, [type]);
 
-  const filtered = suppliers.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = suppliers.filter((s) => {
+    const nameMatch = s.name.toLowerCase().includes(search.toLowerCase());
+    if (!nameMatch) return false;
+
+    // Si es Hotel, Actividad (operator) o Traslado (transport), filtrar por ciudad donde opera si está definida
+    if (
+      destinationCity &&
+      (type === "hotel" || type === "operator" || type === "transport") &&
+      s.operatingCities &&
+      s.operatingCities.length > 0
+    ) {
+      const destLower = destinationCity.toLowerCase().trim();
+      const operatesInCity = s.operatingCities.some((c) => {
+        const cLower = c.toLowerCase().trim();
+        return destLower.includes(cLower) || cLower.includes(destLower);
+      });
+      if (!operatesInCity) return false;
+    }
+
+    return true;
+  });
 
   return (
     <div className={`relative ${className}`}>
@@ -84,7 +104,8 @@ export function SupplierCombobox({
           <div className="absolute left-0 top-full z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
             {filtered.length === 0 ? (
               <div className="p-2 text-center text-xs text-text-3">
-                No hay coincidencias.
+                No hay proveedores coincidentes
+                {destinationCity ? ` para ${destinationCity}` : ""}.
                 <button
                   type="button"
                   className="mt-1 block w-full text-brand hover:underline font-medium"
@@ -93,7 +114,7 @@ export function SupplierCombobox({
                     setModalOpen(true);
                   }}
                 >
-                  + Registrar &ldquo;{search}&rdquo; como proveedor
+                  + Registrar &ldquo;{search || "nuevo"}&rdquo; como proveedor
                 </button>
               </div>
             ) : (
@@ -108,8 +129,15 @@ export function SupplierCombobox({
                   }}
                   className="flex w-full items-center justify-between rounded px-2.5 py-1.5 text-left text-xs hover:bg-accent text-foreground"
                 >
-                  <span className="font-medium">{s.name}</span>
-                  <span className="text-[11px] text-text-3">
+                  <div className="flex flex-col min-w-0 pr-2">
+                    <span className="font-medium truncate">{s.name}</span>
+                    {s.operatingCities && s.operatingCities.length > 0 && (
+                      <span className="text-[10px] text-text-3 truncate">
+                        📍 {s.operatingCities.join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-text-3 shrink-0">
                     {s.commission ? `${s.commission}% com.` : s.type}
                   </span>
                 </button>
@@ -121,6 +149,9 @@ export function SupplierCombobox({
 
       {modalOpen && (
         <SupplierModal
+          defaultType={type !== "all" ? type : undefined}
+          defaultCity={destinationCity}
+          defaultName={search.trim() || undefined}
           onClose={() => setModalOpen(false)}
           onSaved={(newSup) => {
             setSuppliers((prev) => [newSup, ...prev]);

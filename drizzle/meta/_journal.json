@@ -162,6 +162,13 @@
       "when": 1792761236491,
       "tag": "0022_sad_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792952217416,
+      "tag": "0023_unknown_living_lightning",
+      "breakpoints": true
     }
   ]
 }
