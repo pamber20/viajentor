@@ -17,6 +17,7 @@ import {
   Star,
   Trash2,
   Truck,
+  Upload,
   Users,
   XCircle,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import type { TravelSupplier, TravelSupplierType } from "@/lib/travel/types";
 import { SupplierModal } from "./supplier-modal";
+import { ImportSuppliersModal } from "./import-suppliers-modal";
 
 const TYPE_CONFIG: Record<
   TravelSupplierType,
@@ -47,6 +49,7 @@ export function SupplierListClient() {
   const [activeOnly, setActiveOnly] = useState(false);
 
   const [modalSupplier, setModalSupplier] = useState<TravelSupplier | null | undefined>(undefined);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchSuppliers = useCallback(async () => {
@@ -111,10 +114,16 @@ export function SupplierListClient() {
           </p>
         </div>
 
-        <Button onClick={() => setModalSupplier(null)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Nuevo Proveedor
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+            <Upload className="mr-1.5 h-4 w-4" />
+            Importar CSV
+          </Button>
+          <Button onClick={() => setModalSupplier(null)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Nuevo Proveedor
+          </Button>
+        </div>
       </header>
 
       {/* Filters and search */}
@@ -391,6 +400,14 @@ export function SupplierListClient() {
           }}
         />
       )}
+
+      <ImportSuppliersModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImported={() => {
+          void fetchSuppliers();
+        }}
+      />
     </div>
   );
 }

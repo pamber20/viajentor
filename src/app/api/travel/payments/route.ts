@@ -18,11 +18,7 @@ const createPaymentSchema = z.object({
 
 export const GET = withAuth(async (session, req: Request) => {
   const url = new URL(req.url);
-  const quoteId = url.searchParams.get("quoteId");
-
-  if (!quoteId) {
-    return apiError(400, "missing_param", "El parámetro quoteId es obligatorio");
-  }
+  const quoteId = url.searchParams.get("quoteId") || undefined;
 
   const payments = await listPayments({
     organizationId: session.organizationId,

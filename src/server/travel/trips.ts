@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
@@ -61,6 +61,9 @@ export interface TravelVoucherDto {
     departureTime?: string;
     departureCity?: string;
     arrivalCity?: string;
+    arrivalDate?: string;
+    arrivalTime?: string;
+    cabin?: string;
     returnAirline?: string;
     returnFlightNumber?: string;
     returnDate?: string;
@@ -94,19 +97,20 @@ export interface TravelVoucherDto {
 
 export async function listPayments(input: {
   organizationId: string;
-  quoteId: string;
+  quoteId?: string;
 }): Promise<TravelPaymentDto[]> {
   const db = getDb();
+  const conditions = [
+    eq(schema.travelPayment.organizationId, input.organizationId),
+  ];
+  if (input.quoteId) {
+    conditions.push(eq(schema.travelPayment.quoteId, input.quoteId));
+  }
+
   const rows = await db
     .select()
     .from(schema.travelPayment)
-    .where(
-      scoped(
-        schema.travelPayment.organizationId,
-        input.organizationId,
-        eq(schema.travelPayment.quoteId, input.quoteId)
-      )
-    )
+    .where(and(...conditions))
     .orderBy(desc(schema.travelPayment.createdAt));
 
   return rows.map((r) => ({

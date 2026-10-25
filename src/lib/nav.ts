@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { canConfigure } from "@/lib/auth/roles";
@@ -75,6 +76,7 @@ export function appNavGroups({
     trabajo.push(
       { href: "/quotes", label: "Cotizaciones", icon: FileText },
       { href: "/trips", label: "Viajes", icon: Plane },
+      { href: "/payments", label: "Abonos y Cartera", icon: Wallet },
       { href: "/suppliers", label: "Proveedores", icon: Building2 }
     );
   }

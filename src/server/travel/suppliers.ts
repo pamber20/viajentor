@@ -220,3 +220,37 @@ export async function deleteSupplier(input: {
 
   return deleted.length > 0;
 }
+
+export async function createSuppliersBulk(input: {
+  organizationId: string;
+  suppliers: Array<Omit<CreateSupplierInput, "organizationId">>;
+}): Promise<{ count: number; suppliers: TravelSupplier[] }> {
+  const db = getDb();
+  if (input.suppliers.length === 0) return { count: 0, suppliers: [] };
+
+  const valuesToInsert = input.suppliers.map((s) => ({
+    id: newId("travelSupplier"),
+    organizationId: input.organizationId,
+    name: s.name.trim(),
+    type: s.type,
+    contact: s.contact ?? null,
+    negotiatedRates: s.negotiatedRates ?? null,
+    commission: s.commission ?? null,
+    sla: s.sla?.trim() ?? null,
+    rating: s.rating ?? 5,
+    notes: s.notes?.trim() ?? null,
+    active: s.active ?? true,
+    operatingCities: s.operatingCities ?? null,
+    hotelMeta: s.hotelMeta ?? null,
+  }));
+
+  const inserted = await db
+    .insert(schema.travelSupplier)
+    .values(valuesToInsert)
+    .returning();
+
+  return {
+    count: inserted.length,
+    suppliers: inserted.map(serializeSupplier),
+  };
+}

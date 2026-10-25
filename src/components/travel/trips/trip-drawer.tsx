@@ -41,6 +41,8 @@ import {
   downloadReceiptPdf,
   downloadVoucherPdf,
 } from "@/components/travel/pdf";
+import { VoucherEditModal } from "./voucher-edit-modal";
+import { Edit3 } from "lucide-react";
 
 const BOOKING_STATUSES: { value: BookingStatus; label: string; color: string }[] = [
   { value: "pending", label: "Pendiente de Reserva", color: "bg-warning-tint text-warning-text border-warning-soft" },
@@ -95,6 +97,7 @@ export function TripDrawer({
   // Voucher
   const [voucher, setVoucher] = useState<TravelVoucherDto | null>(null);
   const [savingVoucher, setSavingVoucher] = useState(false);
+  const [isEditingVoucher, setIsEditingVoucher] = useState(false);
 
   // Billing and Counter
   const [billingName, setBillingName] = useState(quote.billingName ?? "");
@@ -1892,6 +1895,14 @@ export function TripDrawer({
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
+                    onClick={() => setIsEditingVoucher(true)}
+                    className="h-8 text-xs font-bold gap-1.5 bg-brand text-brand-foreground hover:bg-brand-hover shadow-sm"
+                  >
+                    <Edit3 className="h-3.5 w-3.5" />
+                    Personalizar / Editar Voucher
+                  </Button>
+                  <Button
+                    size="sm"
                     variant="outline"
                     disabled={downloadingVoucherPdf}
                     onClick={() => void handleDownloadVoucherPdf()}
@@ -1980,6 +1991,19 @@ export function TripDrawer({
           onSaved={() => {
             void loadPayments();
             setPaymentModalOpen(false);
+          }}
+        />
+      )}
+
+      {isEditingVoucher && (
+        <VoucherEditModal
+          isOpen={isEditingVoucher}
+          quote={quote}
+          initialVoucher={voucher}
+          onClose={() => setIsEditingVoucher(false)}
+          onSaved={(updatedVoucher) => {
+            setVoucher(updatedVoucher);
+            setIsEditingVoucher(false);
           }}
         />
       )}
