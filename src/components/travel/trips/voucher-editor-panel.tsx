@@ -7,7 +7,6 @@ import {
   Hotel,
   Car,
   MapPin,
-  FileText,
   Plus,
   Trash2,
   ShieldCheck,
@@ -1102,17 +1101,31 @@ export function VoucherEditorPanel({
                 </Button>
               </div>
 
-              <div className="pt-3 border-t space-y-2">
-                <label className="text-xs font-bold text-foreground block">
-                  Información Adicional e Instrucciones para el Pasajero
+              <div className="pt-3 border-t space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={checkInReminder}
+                    onChange={(e) => setCheckInReminder(e.target.checked)}
+                    className="rounded border-border text-brand focus:ring-brand h-4 w-4"
+                  />
+                  <span className="font-semibold text-foreground">
+                    Recordatorio de Web Check-in (24 a 48 horas previas al vuelo)
+                  </span>
                 </label>
-                <Textarea
-                  rows={3}
-                  value={additionalInfo}
-                  onChange={(e) => setAdditionalInfo(e.target.value)}
-                  placeholder="Instrucciones clave para el pasajero..."
-                  className="text-xs"
-                />
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-foreground block">
+                    Información Adicional e Instrucciones para el Pasajero
+                  </label>
+                  <Textarea
+                    rows={3}
+                    value={additionalInfo}
+                    onChange={(e) => setAdditionalInfo(e.target.value)}
+                    placeholder="Instrucciones clave para el pasajero..."
+                    className="text-xs"
+                  />
+                </div>
               </div>
             </div>
           </div>

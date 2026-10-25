@@ -6,7 +6,6 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  Copy,
   DollarSign,
   Edit2,
   FileDown,
@@ -95,7 +94,6 @@ export function TripDrawer({
 
   // Voucher
   const [voucher, setVoucher] = useState<TravelVoucherDto | null>(null);
-  const [savingVoucher, setSavingVoucher] = useState(false);
 
   // Billing and Counter
   const [billingName, setBillingName] = useState(quote.billingName ?? "");
@@ -703,24 +701,6 @@ export function TripDrawer({
 
     void navigator.clipboard.writeText(lines.join("\n"));
     alert("Voucher copiado al portapapeles para enviar por WhatsApp");
-  }
-
-  /* Save Voucher */
-  async function handleSaveVoucher() {
-    setSavingVoucher(true);
-    try {
-      await fetch(`/api/travel/vouchers/${quote.id}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          additionalInfo: voucher?.additionalInfo ?? null,
-          checkInReminder: voucher?.checkInReminder ?? true,
-        }),
-      });
-      alert("Voucher actualizado con éxito");
-    } finally {
-      setSavingVoucher(false);
-    }
   }
 
   return (
