@@ -28,6 +28,14 @@ import type { TravelPaymentDto } from "@/server/travel/trips";
 import { PaymentModal } from "@/components/travel/trips/payment-modal";
 import { downloadReceiptPdf } from "@/components/travel/pdf";
 
+function getQuoteTotal(quote: TravelQuoteDto): number {
+  return (
+    quote.totals?.finalTotal ||
+    quote.amortizationSchedule?.reduce((sum, i) => sum + i.amount, 0) ||
+    0
+  );
+}
+
 export function PaymentsClient() {
   const [activeTab, setActiveTab] = useState<"abonos" | "comisiones">("abonos");
   const [loading, setLoading] = useState(true);
@@ -129,7 +137,7 @@ export function PaymentsClient() {
     for (const quote of quotes) {
       const qPayments = paymentsByQuote.get(quote.id) || [];
       const paid = qPayments.reduce((acc, p) => acc + p.amount, 0);
-      const total = quote.totalAmount || 0;
+      const total = getQuoteTotal(quote);
       const balance = Math.max(0, total - paid);
 
       totalCollected += paid;
@@ -167,7 +175,7 @@ export function PaymentsClient() {
   const selectedQuoteFinancials = useMemo(() => {
     if (!selectedQuote) return null;
     const paid = selectedQuotePayments.reduce((acc, p) => acc + p.amount, 0);
-    const total = selectedQuote.totalAmount || 0;
+    const total = getQuoteTotal(selectedQuote);
     const balance = Math.max(0, total - paid);
     const progress = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
 
@@ -234,7 +242,7 @@ export function PaymentsClient() {
     return quotes
       .filter((q) => q.isBooking || q.status === "accepted" || q.status === "completed")
       .map((q) => {
-        const total = q.totalAmount || 0;
+        const total = getQuoteTotal(q);
         const commissionPercent = q.agencyCommission ?? 10;
         const commissionAmount = (total * commissionPercent) / 100;
         const qPayments = paymentsByQuote.get(q.id) || [];
@@ -396,7 +404,7 @@ export function PaymentsClient() {
                   const isSelected = quote.id === selectedQuoteId;
                   const qPayments = paymentsByQuote.get(quote.id) || [];
                   const paid = qPayments.reduce((sum, p) => sum + p.amount, 0);
-                  const total = quote.totalAmount || 0;
+                  const total = getQuoteTotal(quote);
                   const balance = Math.max(0, total - paid);
                   const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
 
