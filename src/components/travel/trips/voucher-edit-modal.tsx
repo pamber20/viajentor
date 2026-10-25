@@ -55,7 +55,7 @@ export function VoucherEditModal({
     .find((i) => i.type === "Flight");
 
   // Flight State
-  const [flightDetails, setFlightDetails] = useState<Record<string, string | number | boolean | undefined>>({
+  const [flightDetails, setFlightDetails] = useState<Record<string, string>>({
     airline:
       initialVoucher?.flightDetails?.airline ||
       flightItem?.flightDetails?.airline ||
@@ -104,7 +104,7 @@ export function VoucherEditModal({
   });
 
   // Hotel State
-  const [hotelDetails, setHotelDetails] = useState<Record<string, string | number | boolean | undefined>>({
+  const [hotelDetails, setHotelDetails] = useState<Record<string, string>>({
     name:
       initialVoucher?.hotelDetails?.name ||
       hotelItem?.hotelDetails?.hotelName ||
