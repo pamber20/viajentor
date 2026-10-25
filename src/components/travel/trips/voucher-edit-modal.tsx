@@ -11,7 +11,6 @@ import {
   FileText,
   Plus,
   Trash2,
-  CheckCircle2,
   ShieldCheck,
   Loader2,
 } from "lucide-react";
@@ -56,7 +55,7 @@ export function VoucherEditModal({
     .find((i) => i.type === "Flight");
 
   // Flight State
-  const [flightDetails, setFlightDetails] = useState<Record<string, any>>({
+  const [flightDetails, setFlightDetails] = useState<Record<string, string | number | boolean | undefined>>({
     airline:
       initialVoucher?.flightDetails?.airline ||
       flightItem?.flightDetails?.airline ||
@@ -105,7 +104,7 @@ export function VoucherEditModal({
   });
 
   // Hotel State
-  const [hotelDetails, setHotelDetails] = useState<Record<string, any>>({
+  const [hotelDetails, setHotelDetails] = useState<Record<string, string | number | boolean | undefined>>({
     name:
       initialVoucher?.hotelDetails?.name ||
       hotelItem?.hotelDetails?.hotelName ||

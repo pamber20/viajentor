@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { TravelSupplier, TravelSupplierType } from "@/lib/travel/types";
+import type { TravelSupplierType } from "@/lib/travel/types";
 
 interface ImportSuppliersModalProps {
   isOpen: boolean;

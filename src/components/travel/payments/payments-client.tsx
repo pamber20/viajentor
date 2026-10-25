@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
-  Building2,
   Calendar,
   CheckCircle2,
   Clock,
@@ -12,13 +11,11 @@ import {
   FileDown,
   Loader2,
   MapPin,
-  Percent,
   Plus,
   Receipt,
   Search,
   Trash2,
   TrendingUp,
-  User,
   Wallet,
   X,
 } from "lucide-react";
@@ -132,7 +129,7 @@ export function PaymentsClient() {
     for (const quote of quotes) {
       const qPayments = paymentsByQuote.get(quote.id) || [];
       const paid = qPayments.reduce((acc, p) => acc + p.amount, 0);
-      const total = quote.finalTotal || quote.calculatedTotal || 0;
+      const total = quote.totalAmount || 0;
       const balance = Math.max(0, total - paid);
 
       totalCollected += paid;
@@ -143,7 +140,7 @@ export function PaymentsClient() {
         confirmedSalesTotal += total;
 
         // Comisiones estimadas
-        const commissionPct = quote.agencyCommissionPercent ?? 10;
+        const commissionPct = quote.agencyCommission ?? 10;
         const commAmount = (total * commissionPct) / 100;
         totalCommissions += commAmount;
 
@@ -170,7 +167,7 @@ export function PaymentsClient() {
   const selectedQuoteFinancials = useMemo(() => {
     if (!selectedQuote) return null;
     const paid = selectedQuotePayments.reduce((acc, p) => acc + p.amount, 0);
-    const total = selectedQuote.finalTotal || selectedQuote.calculatedTotal || 0;
+    const total = selectedQuote.totalAmount || 0;
     const balance = Math.max(0, total - paid);
     const progress = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
 
@@ -237,8 +234,8 @@ export function PaymentsClient() {
     return quotes
       .filter((q) => q.isBooking || q.status === "accepted" || q.status === "completed")
       .map((q) => {
-        const total = q.finalTotal || q.calculatedTotal || 0;
-        const commissionPercent = q.agencyCommissionPercent ?? 10;
+        const total = q.totalAmount || 0;
+        const commissionPercent = q.agencyCommission ?? 10;
         const commissionAmount = (total * commissionPercent) / 100;
         const qPayments = paymentsByQuote.get(q.id) || [];
         const paid = qPayments.reduce((sum, p) => sum + p.amount, 0);
@@ -399,7 +396,7 @@ export function PaymentsClient() {
                   const isSelected = quote.id === selectedQuoteId;
                   const qPayments = paymentsByQuote.get(quote.id) || [];
                   const paid = qPayments.reduce((sum, p) => sum + p.amount, 0);
-                  const total = quote.finalTotal || quote.calculatedTotal || 0;
+                  const total = quote.totalAmount || 0;
                   const balance = Math.max(0, total - paid);
                   const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
 
@@ -567,7 +564,9 @@ export function PaymentsClient() {
                       </p>
                     ) : (
                       selectedQuote.amortizationSchedule.map((inst, index) => {
-                        const paidInst = inst.paidAmount || 0;
+                        const paidInst = selectedQuotePayments
+                          .filter((p) => p.installmentId === inst.id)
+                          .reduce((sum, p) => sum + p.amount, 0);
                         const instBalance = Math.max(0, inst.amount - paidInst);
                         const isDone = inst.status === "paid" || instBalance === 0;
 
