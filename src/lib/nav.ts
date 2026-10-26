@@ -67,22 +67,22 @@ export function appNavGroups({
   /** #86 — La guía de inicio solo para quien puede configurar. */
   role?: string | null;
 }): NavGroup[] {
-  const trabajo: NavItem[] = [
+  const atencion: NavItem[] = [
     { href: "/inbox", label: "Bandeja", icon: Inbox, badge: true },
     { href: "/pipeline", label: "Pipeline", icon: Kanban },
     { href: "/contacts", label: "Contactos", icon: Users },
   ];
+  if (agenda) atencion.push({ href: "/bookings", label: "Citas", icon: CalendarDays });
+
+  const viajes: NavItem[] = [];
   if (travel) {
-    trabajo.push(
+    viajes.push(
       { href: "/quotes", label: "Cotizaciones", icon: FileText },
       { href: "/trips", label: "Viajes", icon: Plane },
       { href: "/payments", label: "Abonos y Cartera", icon: Wallet },
       { href: "/suppliers", label: "Proveedores", icon: Building2 }
     );
   }
-  // Citas va después de Contactos: es el paso siguiente de un trato, no una
-  // sección aparte.
-  if (agenda) trabajo.push({ href: "/bookings", label: "Citas", icon: CalendarDays });
 
   const agente: NavItem[] = [];
   // Un miembro del equipo no puede hacer ninguno de los pasos de la guía.
@@ -95,11 +95,16 @@ export function appNavGroups({
   );
 
   const groups: NavGroup[] = [
-    { title: "Trabajo", items: trabajo },
-    { title: "Agente", items: agente },
-    // 019 — Se mide al final: primero se atiende y se organiza.
-    { items: [{ href: "/results", label: "Resultados", icon: ChartColumn }] },
+    { title: "Atención", items: atencion },
   ];
+
+  if (travel && viajes.length > 0) {
+    groups.push({ title: "Operación Turística", items: viajes });
+  }
+
+  groups.push({ title: "Agente", items: agente });
+  // 019 — Se mide al final: primero se atiende y se organiza.
+  groups.push({ items: [{ href: "/results", label: "Resultados", icon: ChartColumn }] });
 
   if (superAdmin) {
     groups.push({

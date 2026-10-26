@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
+  ArrowLeft,
   ArrowLeftRight,
   Car,
   Check,
@@ -43,6 +44,8 @@ import type {
 import { SupplierCombobox } from "@/components/travel/suppliers/supplier-combobox";
 import { CITY_AIRPORT_MAP } from "@/hooks/useAirlines";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 
 export interface AirportItem {
   city: string;
@@ -131,6 +134,7 @@ export function QuoteBuilder({
   leadId,
   clientName: initialClientName,
   clientPhone: initialClientPhone,
+  layoutMode = "workspace",
   onClose,
   onSaved,
 }: {
@@ -139,6 +143,7 @@ export function QuoteBuilder({
   leadId?: string | null;
   clientName?: string | null;
   clientPhone?: string | null;
+  layoutMode?: "workspace" | "modal";
   onClose: () => void;
   onSaved: (quote: TravelQuoteDto) => void;
 }) {
@@ -216,13 +221,32 @@ export function QuoteBuilder({
   const [policies, setPolicies] = useState(initialQuote?.policies ?? "");
 
 
-  // Secciones colapsables estilo Viajentor
+  // Secciones colapsables estilo Viajentor: por defecto solo cliente y viaje abiertos para no abrumar
   const [showClient, setShowClient] = useState(true);
   const [showTrip, setShowTrip] = useState(true);
-  const [showPreferences, setShowPreferences] = useState(true);
+  const [showPreferences, setShowPreferences] = useState(false);
   const [showItinerary, setShowItinerary] = useState(true);
-  const [showInclusions, setShowInclusions] = useState(true);
-  const [showFinancial, setShowFinancial] = useState(true);
+  const [showInclusions, setShowInclusions] = useState(false);
+  const [showFinancial, setShowFinancial] = useState(false);
+
+  // Estados de diálogo de confirmación
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const [confirmAiSuggestOpen, setConfirmAiSuggestOpen] = useState(false);
+
+  const { toast } = useToast();
+
+  const isFormDirty =
+    Boolean(clientName.trim() && clientName !== (initialQuote?.clientName ?? initialClientName ?? "")) ||
+    Boolean(destination.trim() && destination !== (initialQuote?.destination ?? "")) ||
+    days.some((d) => d.items.length > 0);
+
+  function requestClose() {
+    if (isFormDirty) {
+      setConfirmCloseOpen(true);
+    } else {
+      onClose();
+    }
+  }
 
   // Preferencias
   const [preferences, setPreferences] = useState<Record<string, boolean>>(
@@ -789,12 +813,20 @@ export function QuoteBuilder({
   }
 
   // AI Itinerary Suggestion
-  async function handleAiSuggest() {
+  function handleAiSuggest() {
     if (!destination.trim()) {
       setError("Indica el destino antes de solicitar sugerencias a la IA");
       return;
     }
+    const hasExistingItems = days.some((d) => d.items.length > 0);
+    if (hasExistingItems) {
+      setConfirmAiSuggestOpen(true);
+    } else {
+      void runAiSuggest();
+    }
+  }
 
+  async function runAiSuggest() {
     setLoadingAi(true);
     setError(null);
 
@@ -845,12 +877,16 @@ export function QuoteBuilder({
         );
 
         setDays(newDays);
+        setShowItinerary(true);
         if (suggestion.recommendedInclusions) setInclusions(suggestion.recommendedInclusions);
         if (suggestion.recommendedExclusions) setExclusions(suggestion.recommendedExclusions);
         if (suggestion.recommendedPolicies) setPolicies(suggestion.recommendedPolicies);
+        toast("Itinerario generado con éxito por la IA.", "success");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al invocar IA");
+      const msg = err instanceof Error ? err.message : "Error al invocar IA";
+      setError(msg);
+      toast(msg, "error");
     } finally {
       setLoadingAi(false);
     }
@@ -937,23 +973,42 @@ export function QuoteBuilder({
       className={
         isFullscreen
           ? "fixed inset-0 z-50 flex flex-col bg-background"
-          : "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-1 sm:p-2.5 backdrop-blur-sm"
+          : layoutMode === "modal"
+          ? "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-1 sm:p-2.5 backdrop-blur-sm"
+          : "flex h-full w-full flex-col bg-background overflow-hidden"
       }
-      onClick={isFullscreen ? undefined : onClose}
+      onClick={layoutMode === "modal" && !isFullscreen ? requestClose : undefined}
     >
       <div
-        role="dialog"
+        role={layoutMode === "modal" ? "dialog" : undefined}
         aria-label={isEditing ? "Editar Cotización" : "Nueva Cotización"}
         className={
           isFullscreen
             ? "flex h-screen w-screen flex-col bg-card"
-            : "flex h-[98vh] max-h-[98vh] w-full max-w-[97vw] 2xl:max-w-[1800px] flex-col rounded-xl border bg-card shadow-2xl transition-all duration-200"
+            : layoutMode === "modal"
+            ? "flex h-[98vh] max-h-[98vh] w-full max-w-[97vw] 2xl:max-w-[1800px] flex-col rounded-xl border bg-card shadow-2xl transition-all duration-200"
+            : "flex h-full w-full flex-col bg-card overflow-hidden"
         }
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header */}
-        <div className="flex items-center justify-between border-b px-5 py-3.5 bg-muted/20">
-          <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3.5 bg-muted/20 sm:px-5">
+          <div className="flex items-center gap-3">
+            {layoutMode === "workspace" && (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={requestClose}
+                  className="gap-1.5 text-xs font-semibold text-text-2 hover:bg-muted"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Volver</span>
+                </Button>
+                <div className="h-6 w-px bg-border hidden sm:block" />
+              </>
+            )}
             <div className="rounded-lg bg-brand p-1.5 text-brand-fg">
               <Plane className="h-4 w-4" />
             </div>
@@ -961,7 +1016,7 @@ export function QuoteBuilder({
               <h2 className="font-bold text-base text-foreground leading-none">
                 {isEditing ? `Editar Cotización ${initialQuote.quoteNumber}` : "Nueva Cotización Turística"}
               </h2>
-              <p className="text-[11px] text-text-3 mt-1">
+              <p className="text-[11px] text-text-3 mt-1 hidden sm:block">
                 Diseñador de itinerarios, costeo dinámico y amortización automática.
               </p>
             </div>
@@ -1001,14 +1056,18 @@ export function QuoteBuilder({
               ) : (
                 <Maximize2 className="h-3.5 w-3.5 mr-1" />
               )}
-              {isFullscreen ? "Ventana" : "Pantalla Completa"}
+              {isFullscreen ? "Restaurar" : "Pantalla Completa"}
             </Button>
-            <button
-              onClick={onClose}
-              className="rounded p-1 text-text-3 hover:text-foreground"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            {layoutMode === "modal" && (
+              <button
+                type="button"
+                onClick={requestClose}
+                className="rounded p-1 text-text-3 hover:text-foreground"
+                aria-label="Cerrar diseñador"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -2503,7 +2562,7 @@ export function QuoteBuilder({
 
           {/* Form Actions */}
           <div className="flex items-center justify-end gap-2 pt-4 border-t">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
+            <Button type="button" variant="ghost" onClick={requestClose} disabled={saving}>
               Cancelar
             </Button>
             <Button type="submit" disabled={saving}>
@@ -2512,6 +2571,30 @@ export function QuoteBuilder({
           </div>
         </form>
       </div>
+
+      {/* Diálogo al salir con cambios sin guardar */}
+      <ConfirmDialog
+        isOpen={confirmCloseOpen}
+        onClose={() => setConfirmCloseOpen(false)}
+        onConfirm={onClose}
+        variant="warning"
+        title="¿Descartar cambios no guardados?"
+        message="Tienes información en el formulario que no ha sido guardada. Si sales ahora, se perderán los datos del itinerario."
+        confirmText="Descartar y salir"
+        cancelText="Continuar editando"
+      />
+
+      {/* Diálogo de sobreescritura de IA */}
+      <ConfirmDialog
+        isOpen={confirmAiSuggestOpen}
+        onClose={() => setConfirmAiSuggestOpen(false)}
+        onConfirm={() => void runAiSuggest()}
+        variant="warning"
+        title="¿Reemplazar itinerario actual con IA?"
+        message="Ya tienes servicios cargados en el itinerario. La generación con Inteligencia Artificial reemplazará los días actuales con la nueva propuesta."
+        confirmText="Sí, generar nueva propuesta"
+        cancelText="Conservar lo que tengo"
+      />
     </div>
   );
 }

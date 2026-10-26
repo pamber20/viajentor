@@ -243,22 +243,24 @@ export function AppNav({
           </button>
         </div>
 
-        <p
-          className="px-2 font-mono text-[10px] tracking-[0.06em] text-text-2"
-          title={versionTitle(branding.name, version)}
-        >
-          {versionLabel(version.commit)}
-          {version.commit && !version.verified && (
-            <span className="mt-0.5 flex items-center gap-1">
-              <AlertTriangle
-                className="h-3 w-3 shrink-0 text-warning-text"
-                strokeWidth={2}
-                aria-hidden
-              />
-              {UNVERIFIED_COMMIT_NOTE}
-            </span>
-          )}
-        </p>
+        {(superAdmin || role === "owner" || role === "admin") && (
+          <p
+            className="px-2 font-mono text-[10px] tracking-[0.06em] text-text-3"
+            title={versionTitle(branding.name, version)}
+          >
+            {versionLabel(version.commit)}
+            {version.commit && !version.verified && (
+              <span className="mt-0.5 flex items-center gap-1">
+                <AlertTriangle
+                  className="h-3 w-3 shrink-0 text-warning-text"
+                  strokeWidth={2}
+                  aria-hidden
+                />
+                {UNVERIFIED_COMMIT_NOTE}
+              </span>
+            )}
+          </p>
+        )}
       </div>
     </aside>
   );

@@ -152,7 +152,46 @@ export function TripsClient({
     );
   };
 
-  const totalValue = trips.reduce((sum, t) => sum + t.totals.finalTotal, 0);
+  const totalsByCurrency = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const t of trips) {
+      const cur = t.currency || "COP";
+      map[cur] = (map[cur] || 0) + t.totals.finalTotal;
+    }
+    return map;
+  }, [trips]);
+
+  if (editingTripQuote) {
+    return (
+      <QuoteBuilder
+        initialQuote={editingTripQuote}
+        layoutMode="workspace"
+        onClose={() => setEditingTripQuote(null)}
+        onSaved={(saved) => {
+          setTrips((prev) => prev.map((x) => (x.id === saved.id ? saved : x)));
+          if (selectedTrip?.id === saved.id) {
+            setSelectedTrip(saved);
+          }
+          setEditingTripQuote(null);
+        }}
+      />
+    );
+  }
+
+  if (selectedTrip) {
+    return (
+      <TripDrawer
+        quote={selectedTrip}
+        layoutMode="workspace"
+        onClose={() => setSelectedTrip(null)}
+        onUpdated={(updated) => {
+          setTrips((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+          setSelectedTrip(updated);
+        }}
+        onEditQuote={(q) => setEditingTripQuote(q)}
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -174,9 +213,19 @@ export function TripsClient({
 
         <div className="text-right">
           <span className="text-[11px] text-text-3 block">Cartera total en viajes</span>
-          <span className="text-base font-extrabold text-foreground">
-            {formatCurrency(totalValue, "COP")}
-          </span>
+          <div className="flex flex-col items-end">
+            {Object.keys(totalsByCurrency).length === 0 ? (
+              <span className="text-base font-extrabold text-foreground">
+                {formatCurrency(0, "COP")}
+              </span>
+            ) : (
+              Object.entries(totalsByCurrency).map(([cur, amount]) => (
+                <span key={cur} className="text-base font-extrabold text-foreground">
+                  {formatCurrency(amount, cur as "COP" | "USD" | "EUR")}
+                </span>
+              ))
+            )}
+          </div>
         </div>
       </header>
 
@@ -399,32 +448,6 @@ export function TripsClient({
           </div>
         )}
       </div>
-
-      {selectedTrip && (
-        <TripDrawer
-          quote={selectedTrip}
-          onClose={() => setSelectedTrip(null)}
-          onUpdated={(updated) => {
-            setTrips((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
-            setSelectedTrip(updated);
-          }}
-          onEditQuote={(q) => setEditingTripQuote(q)}
-        />
-      )}
-
-      {editingTripQuote && (
-        <QuoteBuilder
-          initialQuote={editingTripQuote}
-          onClose={() => setEditingTripQuote(null)}
-          onSaved={(saved) => {
-            setTrips((prev) => prev.map((x) => (x.id === saved.id ? saved : x)));
-            if (selectedTrip?.id === saved.id) {
-              setSelectedTrip(saved);
-            }
-            setEditingTripQuote(null);
-          }}
-        />
-      )}
     </div>
   );
 }

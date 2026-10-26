@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
 import { formatCurrency } from "@/lib/travel/pricing";
 import { downloadQuotePdf } from "@/components/travel/pdf";
+import { useToast } from "@/components/ui/toast";
 
 export function QuotePreviewModal({
   quote,
@@ -33,13 +34,16 @@ export function QuotePreviewModal({
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  const { toast } = useToast();
+
   async function handleDownloadPdf() {
     try {
       setDownloadingPdf(true);
       await downloadQuotePdf(quote);
+      toast("PDF descargado con éxito", "success");
     } catch (err) {
       console.error("Error al descargar PDF:", err);
-      alert("Hubo un error al generar el PDF de la cotización.");
+      toast("Hubo un error al generar el PDF de la cotización.", "error");
     } finally {
       setDownloadingPdf(false);
     }

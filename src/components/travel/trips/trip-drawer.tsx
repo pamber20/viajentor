@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
+  ArrowLeft,
   Calendar,
   CheckCircle2,
   Clock,
@@ -44,6 +45,8 @@ import {
   downloadVoucherPdf,
 } from "@/components/travel/pdf";
 import { VoucherEditorPanel } from "./voucher-editor-panel";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 
 const BOOKING_STATUSES: { value: BookingStatus; label: string; color: string }[] = [
   { value: "pending", label: "Pendiente de Reserva", color: "bg-warning-tint text-warning-text border-warning-soft" },
@@ -56,11 +59,13 @@ const BOOKING_STATUSES: { value: BookingStatus; label: string; color: string }[]
 
 export function TripDrawer({
   quote,
+  layoutMode = "workspace",
   onClose,
   onUpdated,
   onEditQuote,
 }: {
   quote: TravelQuoteDto;
+  layoutMode?: "workspace" | "drawer";
   onClose: () => void;
   onUpdated: (updated: TravelQuoteDto) => void;
   onEditQuote?: (quote: TravelQuoteDto) => void;
@@ -149,7 +154,25 @@ export function TripDrawer({
   const [supplierPayNotes, setSupplierPayNotes] = useState("");
   const [savingSupplierPay, setSavingSupplierPay] = useState(false);
 
-  // Load Payments & Voucher
+  // Colapsar datos de facturación en la cabecera para liberar espacio
+  const [showBillingHeader, setShowBillingHeader] = useState(false);
+
+  // Confirm dialogs
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    variant?: "danger" | "warning" | "primary";
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
+  const { toast } = useToast();
   const loadPayments = useCallback(async () => {
     try {
       const res = await fetch(`/api/travel/payments?quoteId=${quote.id}`);
@@ -244,6 +267,7 @@ export function TripDrawer({
       if (res.ok) {
         const data = await res.json();
         onUpdated(data.quote);
+        toast("Datos de facturación actualizados correctamente", "success");
       }
     } finally {
       setSavingBilling(false);
@@ -267,7 +291,7 @@ export function TripDrawer({
       if (res.ok) {
         const data = await res.json();
         onUpdated(data.quote);
-        alert("Operaciones guardadas correctamente");
+        toast("Operaciones guardadas correctamente", "success");
       }
     } finally {
       setSavingOps(false);
@@ -311,7 +335,7 @@ export function TripDrawer({
     const balanceToSchedule = Math.max(0, quote.totals.finalTotal - keptTotal);
 
     if (balanceToSchedule <= 0) {
-      alert("El saldo ya está completamente cubierto por las cuotas pagadas.");
+      toast("El saldo ya está completamente cubierto por las cuotas pagadas.", "warning");
       return;
     }
 
@@ -353,9 +377,11 @@ export function TripDrawer({
         const data = await res.json();
         onUpdated(data.quote);
         setAutoPlanOpen(false);
+        toast("Plan de cuotas generado con éxito", "success");
       }
     } catch (err) {
       console.error(err);
+      toast("Error al generar plan de amortización", "error");
     }
   }
 
@@ -371,11 +397,12 @@ export function TripDrawer({
     );
 
     if (currentTotal + amount > quote.totals.finalTotal) {
-      alert(
+      toast(
         `El monto supera el total del viaje. Máximo permitido: ${formatCurrency(
           quote.totals.finalTotal - currentTotal,
           quote.currency
-        )}`
+        )}`,
+        "error"
       );
       return;
     }
@@ -401,50 +428,69 @@ export function TripDrawer({
         onUpdated(data.quote);
         setManualInstallmentOpen(false);
         setManualInstallmentAmount("");
+        toast("Cuota añadida con éxito", "success");
       }
     } catch (err) {
       console.error(err);
+      toast("Error al agregar la cuota", "error");
     }
   }
 
   /* Remove Installment */
-  async function handleRemoveInstallment(instId: string) {
-    if (!confirm("¿Deseas eliminar esta cuota del plan?")) return;
-    const updatedSchedule = (quote.amortizationSchedule || []).filter((i) => i.id !== instId);
-
-    try {
-      const res = await fetch(`/api/travel/quotes/${quote.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amortizationSchedule: updatedSchedule }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        onUpdated(data.quote);
-      }
-    } catch (err) {
-      console.error(err);
-    }
+  function handleRemoveInstallment(instId: string) {
+    setConfirmDialog({
+      isOpen: true,
+      title: "¿Eliminar cuota?",
+      message: "¿Deseas eliminar esta cuota del plan de amortización?",
+      variant: "danger",
+      confirmText: "Eliminar cuota",
+      onConfirm: async () => {
+        const updatedSchedule = (quote.amortizationSchedule || []).filter((i) => i.id !== instId);
+        try {
+          const res = await fetch(`/api/travel/quotes/${quote.id}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ amortizationSchedule: updatedSchedule }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            onUpdated(data.quote);
+            toast("Cuota eliminada", "info");
+          }
+        } catch (err) {
+          console.error(err);
+          toast("Error al eliminar cuota", "error");
+        }
+      },
+    });
   }
 
   /* Delete Payment */
-  async function handleDeletePayment(id: string) {
-    if (!confirm("¿Estás seguro de anular este abono? El saldo de la reserva se recalculará.")) {
-      return;
-    }
-    try {
-      const res = await fetch(`/api/travel/payments/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        void loadPayments();
-        const qRes = await fetch(`/api/travel/quotes/${quote.id}`);
-        if (qRes.ok) {
-          const qData = await qRes.json();
-          onUpdated(qData.quote);
+  function handleDeletePayment(id: string) {
+    setConfirmDialog({
+      isOpen: true,
+      title: "¿Anular este abono?",
+      message: "¿Estás seguro de anular este abono? El saldo de la reserva se recalculará automáticamente.",
+      variant: "danger",
+      confirmText: "Anular abono",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/travel/payments/${id}`, { method: "DELETE" });
+          if (res.ok) {
+            void loadPayments();
+            const qRes = await fetch(`/api/travel/quotes/${quote.id}`);
+            if (qRes.ok) {
+              const qData = await qRes.json();
+              onUpdated(qData.quote);
+              toast("Abono anulado con éxito", "info");
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          toast("Error al anular abono", "error");
         }
-      }
-    } catch (err) {
-      console.error(err);
-    }
+      },
+    });
   }
 
   /* PDF Handlers */
@@ -452,9 +498,10 @@ export function TripDrawer({
     try {
       setDownloadingBookingPdf(true);
       await downloadQuotePdf(quote, undefined, payments);
+      toast("PDF de reserva generado", "success");
     } catch (err) {
       console.error("Error al generar PDF de reserva:", err);
-      alert("Hubo un error al generar el PDF de la reserva. Por favor intenta nuevamente.");
+      toast("Hubo un error al generar el PDF de la reserva.", "error");
     } finally {
       setDownloadingBookingPdf(false);
     }
@@ -464,9 +511,10 @@ export function TripDrawer({
     try {
       setDownloadingReceiptId(p.id);
       await downloadReceiptPdf(p, quote);
+      toast("Recibo de caja descargado", "success");
     } catch (err) {
       console.error("Error al generar recibo de caja PDF:", err);
-      alert("Hubo un error al generar el recibo de caja en PDF.");
+      toast("Hubo un error al generar el recibo de caja en PDF.", "error");
     } finally {
       setDownloadingReceiptId(null);
     }
@@ -474,7 +522,7 @@ export function TripDrawer({
 
   async function handleDownloadVoucherPdf() {
     if (!voucher) {
-      alert("Aún no se ha generado el voucher");
+      toast("Aún no se ha generado el voucher", "warning");
       return;
     }
     try {
@@ -512,9 +560,10 @@ export function TripDrawer({
             }
           : voucher.flightDetails,
       });
+      toast("Voucher descargado con éxito", "success");
     } catch (err) {
       console.error("Error al descargar voucher PDF:", err);
-      alert("Hubo un error al generar el voucher en PDF.");
+      toast("Hubo un error al generar el voucher en PDF.", "error");
     } finally {
       setDownloadingVoucherPdf(false);
     }
@@ -578,23 +627,33 @@ export function TripDrawer({
     }
   }
 
-  async function handleDeleteTraveler(id: string) {
-    if (!confirm("¿Deseas remover este pasajero del manifiesto?")) return;
-    const updated = travelers.filter((t) => t.id !== id);
-    setTravelers(updated);
-    try {
-      const res = await fetch(`/api/travel/quotes/${quote.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ travelers: updated }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        onUpdated(data.quote);
-      }
-    } catch (err) {
-      console.error(err);
-    }
+  function handleDeleteTraveler(id: string) {
+    setConfirmDialog({
+      isOpen: true,
+      title: "¿Remover pasajero?",
+      message: "¿Deseas remover este pasajero del manifiesto?",
+      variant: "danger",
+      confirmText: "Remover pasajero",
+      onConfirm: async () => {
+        const updated = travelers.filter((t) => t.id !== id);
+        setTravelers(updated);
+        try {
+          const res = await fetch(`/api/travel/quotes/${quote.id}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ travelers: updated }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            onUpdated(data.quote);
+            toast("Pasajero removido del manifiesto", "info");
+          }
+        } catch (err) {
+          console.error(err);
+          toast("Error al remover pasajero", "error");
+        }
+      },
+    });
   }
 
   /* Supplier Payment Submission */
@@ -635,47 +694,59 @@ export function TripDrawer({
         setSelectedSupplierItem(null);
         setSupplierPayRef("");
         setSupplierPayNotes("");
+        toast("Pago a proveedor registrado", "success");
       }
+    } catch {
+      toast("Error al registrar pago a proveedor", "error");
     } finally {
       setSavingSupplierPay(false);
     }
   }
 
-  async function handleRevertSupplierPayment(dayId: string, itemId: string) {
-    if (!confirm("¿Deseas anular el registro de pago a este proveedor?")) return;
+  function handleRevertSupplierPayment(dayId: string, itemId: string) {
+    setConfirmDialog({
+      isOpen: true,
+      title: "¿Anular registro de pago a proveedor?",
+      message: "¿Deseas anular el registro de pago a este proveedor?",
+      variant: "danger",
+      confirmText: "Anular pago",
+      onConfirm: async () => {
+        const updatedDays: TravelDay[] = quote.days.map((d) => {
+          if (d.id !== dayId) return d;
+          return {
+            ...d,
+            items: d.items.map((it) =>
+              it.id === itemId
+                ? {
+                    ...it,
+                    supplierPaymentStatus: "pending",
+                    supplierPaymentDate: undefined,
+                    supplierPaymentMethod: undefined,
+                    supplierPaymentReference: undefined,
+                    supplierPaymentNotes: undefined,
+                  }
+                : it
+            ),
+          };
+        });
 
-    const updatedDays: TravelDay[] = quote.days.map((d) => {
-      if (d.id !== dayId) return d;
-      return {
-        ...d,
-        items: d.items.map((it) =>
-          it.id === itemId
-            ? {
-                ...it,
-                supplierPaymentStatus: "pending",
-                supplierPaymentDate: undefined,
-                supplierPaymentMethod: undefined,
-                supplierPaymentReference: undefined,
-                supplierPaymentNotes: undefined,
-              }
-            : it
-        ),
-      };
+        try {
+          const res = await fetch(`/api/travel/quotes/${quote.id}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ days: updatedDays }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            onUpdated(data.quote);
+            toast("Pago de proveedor anulado", "info");
+          }
+        } catch (err) {
+          console.error(err);
+          toast("Error al anular pago", "error");
+        }
+      },
     });
-
-    try {
-      const res = await fetch(`/api/travel/quotes/${quote.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ days: updatedDays }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        onUpdated(data.quote);
-      }
-    } catch (err) {
-      console.error(err);
-    }
   }
 
   /* Copy Voucher */
@@ -709,7 +780,7 @@ export function TripDrawer({
     }
 
     void navigator.clipboard.writeText(lines.join("\n"));
-    alert("Voucher copiado al portapapeles para enviar por WhatsApp");
+    toast("Voucher copiado al portapapeles para WhatsApp", "success");
   }
 
   return (
@@ -717,24 +788,42 @@ export function TripDrawer({
       className={
         isFullscreen
           ? "fixed inset-0 z-50 flex flex-col bg-background"
-          : "fixed inset-0 z-50 flex items-center justify-end bg-black/40 backdrop-blur-xs"
+          : layoutMode === "drawer"
+          ? "fixed inset-0 z-50 flex items-center justify-end bg-black/40 backdrop-blur-xs"
+          : "flex h-full w-full flex-col bg-background overflow-hidden"
       }
-      onClick={isFullscreen ? undefined : onClose}
+      onClick={layoutMode === "drawer" && !isFullscreen ? onClose : undefined}
     >
       <div
-        role="dialog"
+        role={layoutMode === "drawer" ? "dialog" : undefined}
         aria-label="Expediente de Reserva"
         className={
           isFullscreen
             ? "flex h-screen w-screen flex-col bg-card"
-            : "flex h-full w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1780px] flex-col bg-card shadow-2xl border-l transition-all duration-200"
+            : layoutMode === "drawer"
+            ? "flex h-full w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1780px] flex-col bg-card shadow-2xl border-l transition-all duration-200"
+            : "flex h-full w-full flex-col bg-card overflow-hidden"
         }
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer Header */}
-        <header className="flex flex-col gap-3 border-b bg-muted/20 p-5">
-          <div className="flex items-start justify-between">
+        <header className="flex flex-col gap-3 border-b bg-muted/20 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
+              {layoutMode === "workspace" && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={onClose}
+                    className="gap-1.5 text-xs font-semibold text-text-2 hover:bg-muted"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>Volver</span>
+                  </Button>
+                  <div className="h-6 w-px bg-border hidden sm:block" />
+                </>
+              )}
               <div className="w-10 h-10 rounded-xl bg-brand-soft flex items-center justify-center text-brand-text">
                 <CheckCircle2 className="h-6 w-6" />
               </div>
@@ -804,15 +893,17 @@ export function TripDrawer({
                 ) : (
                   <Maximize2 className="h-3.5 w-3.5 mr-1" />
                 )}
-                {isFullscreen ? "Panel" : "Pantalla Completa"}
+                {isFullscreen ? "Restaurar" : "Pantalla Completa"}
               </Button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md p-1.5 text-text-3 hover:text-foreground"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              {layoutMode === "drawer" && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-md p-1.5 text-text-3 hover:text-foreground"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -904,43 +995,54 @@ export function TripDrawer({
             </div>
           </div>
 
-          {/* Billing & Counter details */}
-          <div className="rounded-xl border bg-card p-3 space-y-2.5">
-            <div className="flex items-center justify-between border-b pb-1.5">
-              <span className="text-xs font-bold text-text-2">
-                Datos de Facturación & Counter Responsable
-              </span>
-              <Button
+          {/* Billing & Counter details (Colapsable para no tapar el contenido de las pestañas) */}
+          <div className="rounded-xl border bg-card p-2.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <button
                 type="button"
-                size="sm"
-                variant="outline"
-                className="h-6 text-[11px]"
-                onClick={handleSaveBilling}
-                disabled={savingBilling}
+                onClick={() => setShowBillingHeader(!showBillingHeader)}
+                className="text-xs font-bold text-text-2 hover:text-foreground flex items-center gap-1.5"
               >
-                {savingBilling ? "Guardando..." : "Guardar Facturación"}
-              </Button>
+                <span>Datos de Facturación & Counter</span>
+                <span className="text-[10px] text-text-3 font-normal">
+                  {showBillingHeader ? "(Ocultar)" : "(Ver/Editar)"}
+                </span>
+              </button>
+              {showBillingHeader && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-[11px]"
+                  onClick={handleSaveBilling}
+                  disabled={savingBilling}
+                >
+                  {savingBilling ? "Guardando..." : "Guardar Facturación"}
+                </Button>
+              )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <Input
-                placeholder="A quién facturamos (Razón Social / Nombre)"
-                value={billingName}
-                onChange={(e) => setBillingName(e.target.value)}
-                className="h-8 text-xs"
-              />
-              <Input
-                placeholder="NIT / Documento Factura"
-                value={billingId}
-                onChange={(e) => setBillingId(e.target.value)}
-                className="h-8 text-xs"
-              />
-              <Input
-                placeholder="Counter Responsable"
-                value={counterName}
-                onChange={(e) => setCounterName(e.target.value)}
-                className="h-8 text-xs"
-              />
-            </div>
+            {showBillingHeader && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t pt-2">
+                <Input
+                  placeholder="A quién facturamos (Razón Social / Nombre)"
+                  value={billingName}
+                  onChange={(e) => setBillingName(e.target.value)}
+                  className="h-8 text-xs"
+                />
+                <Input
+                  placeholder="NIT / Documento Factura"
+                  value={billingId}
+                  onChange={(e) => setBillingId(e.target.value)}
+                  className="h-8 text-xs"
+                />
+                <Input
+                  placeholder="Counter Responsable"
+                  value={counterName}
+                  onChange={(e) => setCounterName(e.target.value)}
+                  className="h-8 text-xs"
+                />
+              </div>
+            )}
           </div>
         </header>
 
@@ -1931,6 +2033,17 @@ export function TripDrawer({
           }}
         />
       )}
+
+      {/* Diálogo de Confirmación Reutilizable */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        variant={confirmDialog.variant}
+      />
     </div>
   );
 }

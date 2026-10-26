@@ -25,6 +25,8 @@ import { QuoteBuilder } from "./quote-builder";
 import { QuotePreviewModal } from "./quote-preview";
 import { ConvertQuoteModal } from "./convert-modal";
 import { downloadQuotePdf } from "@/components/travel/pdf";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 
 const DEFAULT_STATUS_CONFIG = { label: "Borrador", color: "bg-muted text-text-3 border-border" };
 
@@ -59,14 +61,18 @@ export function QuotesClient({
   const [previewingQuote, setPreviewingQuote] = useState<TravelQuoteDto | null>(null);
   const [convertingQuote, setConvertingQuote] = useState<TravelQuoteDto | null>(null);
   const [downloadingQuoteId, setDownloadingQuoteId] = useState<string | null>(null);
+  const [deleteQuoteId, setDeleteQuoteId] = useState<string | null>(null);
+
+  const { toast } = useToast();
 
   async function handleDownloadPdf(q: TravelQuoteDto) {
     try {
       setDownloadingQuoteId(q.id);
       await downloadQuotePdf(q);
+      toast("PDF de cotización descargado con éxito", "success");
     } catch (err) {
       console.error("Error al descargar PDF:", err);
-      alert("Hubo un error al generar el PDF de la cotización.");
+      toast("Hubo un error al generar el PDF de la cotización.", "error");
     } finally {
       setDownloadingQuoteId(null);
     }
@@ -99,15 +105,44 @@ export function QuotesClient({
     return () => clearTimeout(timer);
   }, [fetchQuotes]);
 
-  async function handleDelete(id: string) {
-    if (!window.confirm("¿Seguro que deseas eliminar esta cotización?")) return;
+  async function executeDeleteQuote(id: string) {
     try {
       const res = await fetch(`/api/travel/quotes/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Error al eliminar");
       setQuotes((prev) => prev.filter((q) => q.id !== id));
+      toast("Cotización eliminada correctamente", "info");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error al eliminar");
+      toast(err instanceof Error ? err.message : "Error al eliminar", "error");
+    } finally {
+      setDeleteQuoteId(null);
     }
+  }
+
+  if (builderOpen || editingQuote) {
+    return (
+      <QuoteBuilder
+        initialQuote={editingQuote}
+        contactId={contactId}
+        leadId={leadId}
+        layoutMode="workspace"
+        onClose={() => {
+          setBuilderOpen(false);
+          setEditingQuote(null);
+        }}
+        onSaved={(saved) => {
+          setQuotes((prev) => {
+            const exists = prev.some((x) => x.id === saved.id);
+            if (exists) {
+              return prev.map((x) => (x.id === saved.id ? saved : x));
+            }
+            return [saved, ...prev];
+          });
+          setBuilderOpen(false);
+          setEditingQuote(null);
+          toast("Cotización guardada exitosamente", "success");
+        }}
+      />
+    );
   }
 
   return (
@@ -297,8 +332,9 @@ export function QuotesClient({
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleDelete(q.id)}
+                        onClick={() => setDeleteQuoteId(q.id)}
                         className="h-8 px-2 text-xs text-danger-text hover:bg-danger-tint"
+                        title="Eliminar cotización"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -312,29 +348,6 @@ export function QuotesClient({
       </div>
 
       {/* Modals */}
-      {builderOpen && (
-        <QuoteBuilder
-          initialQuote={editingQuote}
-          contactId={contactId}
-          leadId={leadId}
-          onClose={() => {
-            setBuilderOpen(false);
-            setEditingQuote(null);
-          }}
-          onSaved={(saved) => {
-            setQuotes((prev) => {
-              const exists = prev.some((x) => x.id === saved.id);
-              if (exists) {
-                return prev.map((x) => (x.id === saved.id ? saved : x));
-              }
-              return [saved, ...prev];
-            });
-            setBuilderOpen(false);
-            setEditingQuote(null);
-          }}
-        />
-      )}
-
       {previewingQuote && (
         <QuotePreviewModal
           quote={previewingQuote}
@@ -354,14 +367,31 @@ export function QuotesClient({
           onConverted={(updated, leadMoved) => {
             setQuotes((prev) => prev.filter((x) => x.id !== updated.id));
             setConvertingQuote(null);
-            alert(
+            toast(
               `¡Reserva ${updated.bookingNumber} confirmada con éxito!${
                 leadMoved ? " El lead fue actualizado en el Pipeline a Ganado." : ""
-              }`
+              }`,
+              "success"
             );
           }}
         />
       )}
+
+      {/* ConfirmDialog para eliminar cotización */}
+      <ConfirmDialog
+        isOpen={Boolean(deleteQuoteId)}
+        onClose={() => setDeleteQuoteId(null)}
+        onConfirm={() => {
+          if (deleteQuoteId) {
+            void executeDeleteQuote(deleteQuoteId);
+          }
+        }}
+        variant="danger"
+        title="¿Eliminar cotización?"
+        message="¿Estás seguro de que deseas eliminar esta cotización comercial del sistema?"
+        confirmText="Eliminar cotización"
+        cancelText="Cancelar"
+      />
     </div>
   );
 }

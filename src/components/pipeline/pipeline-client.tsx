@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   useDraggable,
   useDroppable,
@@ -25,6 +26,7 @@ import { LossReasonDialog } from "./loss-reason-dialog";
 import { AmountDialog } from "./amount-dialog";
 import { PriorityBadge } from "./priority-picker";
 import { LeadDrawer } from "./lead-drawer";
+import { useToast } from "@/components/ui/toast";
 
 export type BoardLead = {
   id: string;
@@ -39,6 +41,8 @@ export type BoardLead = {
 };
 
 export function PipelineClient() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
   const [stages, setStages] = useState<StageDto[]>([]);
   const [currency, setCurrency] = useState("MXN");
   const [leads, setLeads] = useState<BoardLead[]>([]);
@@ -61,21 +65,31 @@ export function PipelineClient() {
   const abierto = leads.find((l) => l.id === abiertoId) ?? null;
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor)
   );
 
   const refetch = useCallback(async () => {
-    const res = await fetch("/api/pipeline/board").catch(() => null);
-    if (!res?.ok) return;
-    const data = (await res.json()) as {
-      stages: StageDto[];
-      leads: BoardLead[];
-      currency?: string;
-    };
-    if (data.currency) setCurrency(data.currency);
-    setStages(data.stages);
-    setLeads(data.leads);
-  }, []);
+    try {
+      const res = await fetch("/api/pipeline/board");
+      if (!res.ok) {
+        toast("No se pudo cargar el tablero", "error");
+        return;
+      }
+      const data = (await res.json()) as {
+        stages: StageDto[];
+        leads: BoardLead[];
+        currency?: string;
+      };
+      if (data.currency) setCurrency(data.currency);
+      setStages(data.stages);
+      setLeads(data.leads);
+    } catch {
+      toast("Error de conexión al cargar el tablero", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
   useEffect(() => {
     void refetch();
@@ -96,7 +110,7 @@ export function PipelineClient() {
     setLeads((prev) =>
       prev.map((l) => (l.id === leadId ? { ...l, stageId: overStage, position } : l))
     );
-    await fetch(`/api/pipeline/leads/${leadId}`, {
+    const res = await fetch(`/api/pipeline/leads/${leadId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -107,6 +121,9 @@ export function PipelineClient() {
           : {}),
       }),
     }).catch(() => null);
+    if (!res || !res.ok) {
+      toast("No se pudo actualizar la etapa del trato", "error");
+    }
     void refetch();
   }
 
@@ -114,12 +131,15 @@ export function PipelineClient() {
     setLeads((prev) =>
       prev.map((l) => (l.id === leadId ? { ...l, amountCents: cents } : l))
     );
-    await fetch(`/api/pipeline/leads/${leadId}`, {
+    const res = await fetch(`/api/pipeline/leads/${leadId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       // Sin `stageId`: esto NO mueve la tarjeta, solo escribe el importe.
       body: JSON.stringify({ amountCents: cents }),
     }).catch(() => null);
+    if (!res || !res.ok) {
+      toast("No se pudo actualizar el valor del trato", "error");
+    }
     void refetch();
   }
 
@@ -127,11 +147,14 @@ export function PipelineClient() {
     setLeads((prev) =>
       prev.map((l) => (l.id === leadId ? { ...l, priority } : l))
     );
-    await fetch(`/api/pipeline/leads/${leadId}`, {
+    const res = await fetch(`/api/pipeline/leads/${leadId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ priority }),
     }).catch(() => null);
+    if (!res || !res.ok) {
+      toast("No se pudo actualizar la prioridad", "error");
+    }
     void refetch();
   }
 
@@ -182,31 +205,40 @@ export function PipelineClient() {
       {/* El tablero se arrastra en horizontal; en el teléfono cada columna
           se detiene en su sitio (snap) para no quedar a medio camino. */}
       <div className="flex-1 snap-x snap-mandatory overflow-x-auto p-3 sm:snap-none sm:p-4">
-        <DndContext
-          sensors={sensors}
-          onDragStart={onDragStart}
-          onDragEnd={(e) => void onDragEnd(e)}
-        >
-          <div className="flex h-full gap-3">
-            {stages.map((stage) => (
-              <StageColumn
-                key={stage.id}
-                stage={stage}
-                currency={currency}
-                onEditAmount={setEditandoMonto}
-                onOpen={(l) => setAbiertoId(l.id)}
-                leads={leads
-                  .filter((l) => l.stageId === stage.id)
-                  .sort((a, b) => a.position - b.position)}
-              />
-            ))}
+        {loading ? (
+          <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              Cargando tablero...
+            </div>
           </div>
-          <DragOverlay>
-            {activeLead ? (
-              <LeadCard lead={activeLead} currency={currency} overlay />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            onDragStart={onDragStart}
+            onDragEnd={(e) => void onDragEnd(e)}
+          >
+            <div className="flex h-full gap-3">
+              {stages.map((stage) => (
+                <StageColumn
+                  key={stage.id}
+                  stage={stage}
+                  currency={currency}
+                  onEditAmount={setEditandoMonto}
+                  onOpen={(l) => setAbiertoId(l.id)}
+                  leads={leads
+                    .filter((l) => l.stageId === stage.id)
+                    .sort((a, b) => a.position - b.position)}
+                />
+              ))}
+            </div>
+            <DragOverlay>
+              {activeLead ? (
+                <LeadCard lead={activeLead} currency={currency} overlay />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        )}
       </div>
 
       {managing && (

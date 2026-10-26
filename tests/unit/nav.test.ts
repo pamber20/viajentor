@@ -16,9 +16,9 @@ const labels = (groups: { items: { label: string }[] }[]) =>
   groups.map((g) => g.items.map((i) => i.label));
 
 describe("barra lateral agrupada", () => {
-  it("con todo apagado y como miembro: Trabajo, Agente y Resultados", () => {
+  it("con todo apagado y como miembro: Atención, Agente y Resultados", () => {
     const groups = appNavGroups({ role: "member", travel: false });
-    expect(groups.map((g) => g.title)).toEqual(["Trabajo", "Agente", undefined]);
+    expect(groups.map((g) => g.title)).toEqual(["Atención", "Agente", undefined]);
     expect(labels(groups)).toEqual([
       ["Bandeja", "Pipeline", "Contactos"],
       ["Agente", "Laboratorio"],
@@ -26,36 +26,45 @@ describe("barra lateral agrupada", () => {
     ]);
   });
 
-  it("módulo de viajes activo por defecto en Trabajo", () => {
+  it("módulo de viajes activo por defecto en Operación Turística", () => {
     const groups = appNavGroups({ role: "member" });
+    expect(groups.map((g) => g.title)).toEqual([
+      "Atención",
+      "Operación Turística",
+      "Agente",
+      undefined,
+    ]);
     expect(labels(groups)[0]).toEqual([
       "Bandeja",
       "Pipeline",
       "Contactos",
+    ]);
+    expect(labels(groups)[1]).toEqual([
       "Cotizaciones",
       "Viajes",
+      "Abonos y Cartera",
       "Proveedores",
     ]);
   });
 
-  it("AGENDA añade Citas al final de Trabajo", () => {
-    const [trabajo] = appNavGroups({ agenda: true, travel: false, role: "member" });
-    expect(trabajo!.items.map((i) => i.label)).toEqual([
+  it("AGENDA añade Citas al final de Atención", () => {
+    const [atencion] = appNavGroups({ agenda: true, travel: false, role: "member" });
+    expect(atencion!.items.map((i) => i.label)).toEqual([
       "Bandeja",
       "Pipeline",
       "Contactos",
       "Citas",
     ]);
-    expect(trabajo!.items.at(-1)!.href).toBe("/bookings");
+    expect(atencion!.items.at(-1)!.href).toBe("/bookings");
   });
 
   it("la guía de inicio abre el grupo Agente solo para quien configura", () => {
     for (const role of ["owner", "admin"]) {
-      const agente = appNavGroups({ role })[1]!;
+      const agente = appNavGroups({ role }).find((g) => g.title === "Agente")!;
       expect(agente.items[0]).toMatchObject({ href: "/onboarding", label: "Guía de inicio" });
     }
     for (const role of ["member", null, undefined]) {
-      const agente = appNavGroups({ role })[1]!;
+      const agente = appNavGroups({ role }).find((g) => g.title === "Agente")!;
       expect(agente.items.map((i) => i.href)).not.toContain("/onboarding");
     }
   });

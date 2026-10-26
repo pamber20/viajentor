@@ -125,6 +125,7 @@ export function ContactQuotesWidget({
           leadId={leadId}
           clientName={clientName}
           clientPhone={clientPhone}
+          layoutMode="modal"
           onClose={() => setBuilderOpen(false)}
           onSaved={() => {
             void loadQuotes();

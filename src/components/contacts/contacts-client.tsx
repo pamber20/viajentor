@@ -28,10 +28,12 @@ import { PriorityBadge } from "@/components/pipeline/priority-picker";
 import { ImportContactsDialog } from "./import-contacts-dialog";
 import { NewContactDialog } from "./new-contact-dialog";
 import { StartConversation } from "./start-conversation";
+import { useToast } from "@/components/ui/toast";
 
 export function ContactsClient() {
   const router = useRouter();
   const [contacts, setContacts] = useState<ContactDto[]>([]);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [stage, setStage] = useState("all");
   const [stages, setStages] = useState<string[]>([]);
@@ -41,6 +43,8 @@ export function ContactsClient() {
   const [importando, setImportando] = useState(false);
   const [escribiendo, setEscribiendo] = useState<ContactDto | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const { toast } = useToast();
 
   // Mismo rescate que en la Bandeja: lo tecleado antes de que hidrate el JS
   // se perdía en silencio. Ver conversation-list.tsx.
@@ -63,17 +67,21 @@ export function ContactsClient() {
     if (query.trim()) params.set("q", query.trim());
     if (stage !== "all") params.set("stage", stage);
     if (showArchived) params.set("archived", "true");
-    const res = await fetch(`/api/contacts?${params}`).catch(() => null);
-    if (!res?.ok) return;
-    const data = (await res.json()) as { contacts: ContactDto[] };
-    // A quién llamar primero: alta arriba, sin prioridad al final. El orden lo
-    // decide esta lista, no el servidor, porque es una preferencia de trabajo y
-    // no un dato del contacto.
-    setContacts(
-      [...data.contacts].sort(
-        (a, b) => priorityRank(a.priority ?? null) - priorityRank(b.priority ?? null)
-      )
-    );
+    try {
+      const res = await fetch(`/api/contacts?${params}`).catch(() => null);
+      if (!res?.ok) return;
+      const data = (await res.json()) as { contacts: ContactDto[] };
+      // A quién llamar primero: alta arriba, sin prioridad al final. El orden lo
+      // decide esta lista, no el servidor, porque es una preferencia de trabajo y
+      // no un dato del contacto.
+      setContacts(
+        [...data.contacts].sort(
+          (a, b) => priorityRank(a.priority ?? null) - priorityRank(b.priority ?? null)
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [query, stage, showArchived]);
 
   useEffect(() => {
@@ -82,11 +90,16 @@ export function ContactsClient() {
   }, [refetch]);
 
   async function patch(id: string, body: Record<string, unknown>) {
-    await fetch(`/api/contacts/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }).catch(() => null);
+    try {
+      const res = await fetch(`/api/contacts/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("No se pudo actualizar el contacto");
+    } catch {
+      toast("Error al actualizar el contacto. Inténtalo de nuevo.", "error");
+    }
     void refetch();
   }
 
@@ -144,7 +157,11 @@ export function ContactsClient() {
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        {contacts.length === 0 ? (
+        {loading ? (
+          <div className="flex h-48 items-center justify-center text-xs text-muted-foreground">
+            Cargando contactos…
+          </div>
+        ) : contacts.length === 0 ? (
           query.trim() || stage !== "all" ? (
             <EmptyState
               icon={Search}

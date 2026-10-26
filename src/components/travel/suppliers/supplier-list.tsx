@@ -28,6 +28,8 @@ import { Input } from "@/components/ui/input";
 import type { TravelSupplier, TravelSupplierType } from "@/lib/travel/types";
 import { SupplierModal } from "./supplier-modal";
 import { ImportSuppliersModal } from "./import-suppliers-modal";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 
 const TYPE_CONFIG: Record<
   TravelSupplierType,
@@ -51,6 +53,9 @@ export function SupplierListClient() {
   const [modalSupplier, setModalSupplier] = useState<TravelSupplier | null | undefined>(undefined);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmSupplierId, setConfirmSupplierId] = useState<string | null>(null);
+
+  const { toast } = useToast();
 
   const fetchSuppliers = useCallback(async () => {
     setLoading(true);
@@ -78,10 +83,7 @@ export function SupplierListClient() {
     return () => clearTimeout(timer);
   }, [fetchSuppliers]);
 
-  async function handleDelete(id: string) {
-    if (!window.confirm("¿Seguro que deseas eliminar este proveedor del catálogo?")) {
-      return;
-    }
+  async function executeDeleteSupplier(id: string) {
     setDeletingId(id);
     try {
       const res = await fetch(`/api/travel/suppliers/${id}`, {
@@ -89,10 +91,12 @@ export function SupplierListClient() {
       });
       if (!res.ok) throw new Error("No se pudo eliminar el proveedor");
       setSuppliers((prev) => prev.filter((s) => s.id !== id));
+      toast("Proveedor eliminado del catálogo", "info");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error al eliminar");
+      toast(err instanceof Error ? err.message : "Error al eliminar", "error");
     } finally {
       setDeletingId(null);
+      setConfirmSupplierId(null);
     }
   }
 
@@ -370,7 +374,7 @@ export function SupplierListClient() {
                       size="sm"
                       variant="ghost"
                       disabled={deletingId === s.id}
-                      onClick={() => handleDelete(s.id)}
+                      onClick={() => setConfirmSupplierId(s.id)}
                       className="h-8 px-2 text-xs text-danger-text hover:bg-danger-tint"
                     >
                       <Trash2 className="h-3.5 w-3.5 mr-1" />
@@ -397,6 +401,7 @@ export function SupplierListClient() {
               return [saved, ...prev];
             });
             setModalSupplier(undefined);
+            toast("Proveedor guardado con éxito", "success");
           }}
         />
       )}
@@ -406,7 +411,24 @@ export function SupplierListClient() {
         onClose={() => setIsImportOpen(false)}
         onImported={() => {
           void fetchSuppliers();
+          toast("Proveedores importados exitosamente", "success");
         }}
+      />
+
+      {/* ConfirmDialog para eliminar proveedor */}
+      <ConfirmDialog
+        isOpen={Boolean(confirmSupplierId)}
+        onClose={() => setConfirmSupplierId(null)}
+        onConfirm={() => {
+          if (confirmSupplierId) {
+            void executeDeleteSupplier(confirmSupplierId);
+          }
+        }}
+        variant="danger"
+        title="¿Eliminar proveedor?"
+        message="¿Seguro que deseas eliminar este proveedor del catálogo de tu agencia?"
+        confirmText="Eliminar proveedor"
+        cancelText="Cancelar"
       />
     </div>
   );

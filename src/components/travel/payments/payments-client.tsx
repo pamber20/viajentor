@@ -27,6 +27,8 @@ import type { TravelQuoteDto } from "@/server/travel/quotes";
 import type { TravelPaymentDto } from "@/server/travel/trips";
 import { PaymentModal } from "@/components/travel/trips/payment-modal";
 import { downloadReceiptPdf } from "@/components/travel/pdf";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 
 function getQuoteTotal(quote: TravelQuoteDto): number {
   return (
@@ -52,6 +54,9 @@ export function PaymentsClient() {
   // Estados de PDF y borrado
   const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null);
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
+  const [confirmPaymentId, setConfirmPaymentId] = useState<string | null>(null);
+
+  const { toast } = useToast();
 
   // Carga inicial
   const loadData = useCallback(async () => {
@@ -206,19 +211,17 @@ export function PaymentsClient() {
     try {
       setDownloadingReceiptId(payment.id);
       await downloadReceiptPdf(payment, selectedQuote);
+      toast("Recibo de caja descargado", "success");
     } catch (err) {
       console.error("Error al generar recibo PDF:", err);
-      alert("Hubo un error al generar el recibo de caja en PDF.");
+      toast("Hubo un error al generar el recibo de caja en PDF.", "error");
     } finally {
       setDownloadingReceiptId(null);
     }
   }
 
-  // Eliminar un abono
-  async function handleDeletePayment(paymentId: string) {
-    if (!confirm("¿Estás seguro de eliminar este abono? Se recalcularán las cuotas del viaje.")) {
-      return;
-    }
+  // Ejecutar eliminación de abono tras confirmación
+  async function executeDeletePayment(paymentId: string) {
     try {
       setDeletingPaymentId(paymentId);
       const res = await fetch(`/api/travel/payments/${paymentId}`, {
@@ -229,11 +232,13 @@ export function PaymentsClient() {
         throw new Error(data.message || "Error al eliminar abono");
       }
       await loadData();
+      toast("Abono eliminado y cuotas recalculadas", "info");
     } catch (err) {
       console.error("Error al eliminar abono:", err);
-      alert(err instanceof Error ? err.message : "Error al eliminar el abono.");
+      toast(err instanceof Error ? err.message : "Error al eliminar el abono.", "error");
     } finally {
       setDeletingPaymentId(null);
+      setConfirmPaymentId(null);
     }
   }
 
@@ -706,8 +711,9 @@ export function PaymentsClient() {
                               size="sm"
                               variant="ghost"
                               disabled={deletingPaymentId === p.id}
-                              onClick={() => void handleDeletePayment(p.id)}
+                              onClick={() => setConfirmPaymentId(p.id)}
                               className="h-8 w-8 p-0 text-text-3 hover:text-danger"
+                              aria-label="Eliminar abono"
                             >
                               {deletingPaymentId === p.id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -835,6 +841,22 @@ export function PaymentsClient() {
           }}
         />
       )}
+
+      {/* ConfirmDialog para eliminar abono */}
+      <ConfirmDialog
+        isOpen={Boolean(confirmPaymentId)}
+        onClose={() => setConfirmPaymentId(null)}
+        onConfirm={() => {
+          if (confirmPaymentId) {
+            void executeDeletePayment(confirmPaymentId);
+          }
+        }}
+        variant="danger"
+        title="¿Eliminar este abono?"
+        message="¿Estás seguro de eliminar este abono? El saldo de la reserva y las cuotas pactadas se recalcularán automáticamente."
+        confirmText="Eliminar abono"
+        cancelText="Cancelar"
+      />
     </div>
   );
 }
