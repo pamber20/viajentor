@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/travel/pricing";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
 import { TripDrawer } from "./trip-drawer";
+import { QuoteBuilder } from "@/components/travel/quotes/quote-builder";
 
 const STATUS_CONFIG: Record<
   string,
@@ -47,6 +48,7 @@ export function TripsClient({
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedTrip, setSelectedTrip] = useState<TravelQuoteDto | null>(null);
+  const [editingTripQuote, setEditingTripQuote] = useState<TravelQuoteDto | null>(null);
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortField, setSortField] = useState<string>("startDate");
@@ -405,6 +407,21 @@ export function TripsClient({
           onUpdated={(updated) => {
             setTrips((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
             setSelectedTrip(updated);
+          }}
+          onEditQuote={(q) => setEditingTripQuote(q)}
+        />
+      )}
+
+      {editingTripQuote && (
+        <QuoteBuilder
+          initialQuote={editingTripQuote}
+          onClose={() => setEditingTripQuote(null)}
+          onSaved={(saved) => {
+            setTrips((prev) => prev.map((x) => (x.id === saved.id ? saved : x)));
+            if (selectedTrip?.id === saved.id) {
+              setSelectedTrip(saved);
+            }
+            setEditingTripQuote(null);
           }}
         />
       )}

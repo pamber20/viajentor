@@ -9,6 +9,8 @@ import {
   FileDown,
   FileText,
   MapPin,
+  Maximize2,
+  Minimize2,
   Users,
   X,
 } from "lucide-react";
@@ -29,6 +31,7 @@ export function QuotePreviewModal({
 }) {
   const [copied, setCopied] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   async function handleDownloadPdf() {
     try {
@@ -95,13 +98,21 @@ export function QuotePreviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      className={
+        isFullscreen
+          ? "fixed inset-0 z-50 flex flex-col bg-background"
+          : "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4 backdrop-blur-sm"
+      }
+      onClick={isFullscreen ? undefined : onClose}
     >
       <div
         role="dialog"
         aria-label="Previsualización de Cotización"
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-xl border bg-card shadow-2xl"
+        className={
+          isFullscreen
+            ? "flex h-screen w-screen flex-col bg-card"
+            : "flex h-[96vh] max-h-[96vh] w-full max-w-6xl 2xl:max-w-7xl flex-col rounded-xl border bg-card shadow-2xl transition-all duration-200"
+        }
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -149,6 +160,20 @@ export function QuotePreviewModal({
                 Convertir a Reserva
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="text-xs text-text-2 border-border hover:bg-muted"
+              title={isFullscreen ? "Restaurar ventana" : "Pantalla completa"}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="h-3.5 w-3.5 mr-1" />
+              ) : (
+                <Maximize2 className="h-3.5 w-3.5 mr-1" />
+              )}
+              {isFullscreen ? "Ventana" : "Pantalla Completa"}
+            </Button>
             <button
               onClick={onClose}
               className="rounded p-1 text-text-3 hover:text-foreground"

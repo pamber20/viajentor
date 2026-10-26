@@ -13,6 +13,9 @@ import {
   Handshake,
   Loader2,
   MapPin,
+  Maximize2,
+  Minimize2,
+  Pencil,
   Plane,
   Plus,
   Printer,
@@ -55,11 +58,14 @@ export function TripDrawer({
   quote,
   onClose,
   onUpdated,
+  onEditQuote,
 }: {
   quote: TravelQuoteDto;
   onClose: () => void;
   onUpdated: (updated: TravelQuoteDto) => void;
+  onEditQuote?: (quote: TravelQuoteDto) => void;
 }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState<
     "amortization" | "payments" | "passengers" | "supplierPayments" | "operations" | "vouchers"
   >("amortization");
@@ -708,13 +714,21 @@ export function TripDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-end bg-black/40 backdrop-blur-xs"
-      onClick={onClose}
+      className={
+        isFullscreen
+          ? "fixed inset-0 z-50 flex flex-col bg-background"
+          : "fixed inset-0 z-50 flex items-center justify-end bg-black/40 backdrop-blur-xs"
+      }
+      onClick={isFullscreen ? undefined : onClose}
     >
       <div
         role="dialog"
         aria-label="Expediente de Reserva"
-        className="flex h-full w-full max-w-4xl flex-col bg-card shadow-2xl border-l"
+        className={
+          isFullscreen
+            ? "flex h-screen w-screen flex-col bg-card"
+            : "flex h-full w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1780px] flex-col bg-card shadow-2xl border-l transition-all duration-200"
+        }
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer Header */}
@@ -740,6 +754,18 @@ export function TripDrawer({
             </div>
 
             <div className="flex items-center gap-2">
+              {onEditQuote && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onEditQuote(quote)}
+                  className="h-8 px-2.5 text-xs text-text-2 border-border hover:bg-muted"
+                  title="Editar Itinerario de la Reserva"
+                >
+                  <Pencil className="mr-1.5 h-3.5 w-3.5 text-brand" />
+                  Editar Itinerario
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="outline"
@@ -766,6 +792,20 @@ export function TripDrawer({
                   </option>
                 ))}
               </select>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="h-8 px-2.5 text-xs text-text-2 border-border hover:bg-muted"
+                title={isFullscreen ? "Restaurar tamaño lateral" : "Pantalla completa"}
+              >
+                {isFullscreen ? (
+                  <Minimize2 className="h-3.5 w-3.5 mr-1" />
+                ) : (
+                  <Maximize2 className="h-3.5 w-3.5 mr-1" />
+                )}
+                {isFullscreen ? "Panel" : "Pantalla Completa"}
+              </Button>
               <button
                 type="button"
                 onClick={onClose}

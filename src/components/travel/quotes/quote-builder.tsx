@@ -11,6 +11,8 @@ import {
   Hotel,
   Layers,
   MapPin,
+  Maximize2,
+  Minimize2,
   Plane,
   Plus,
   Shield,
@@ -141,6 +143,7 @@ export function QuoteBuilder({
   onSaved: (quote: TravelQuoteDto) => void;
 }) {
   const isEditing = !!initialQuote;
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Basic Info
   const [clientName, setClientName] = useState(
@@ -931,13 +934,21 @@ export function QuoteBuilder({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4 backdrop-blur-sm"
-      onClick={onClose}
+      className={
+        isFullscreen
+          ? "fixed inset-0 z-50 flex flex-col bg-background"
+          : "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-1 sm:p-2.5 backdrop-blur-sm"
+      }
+      onClick={isFullscreen ? undefined : onClose}
     >
       <div
         role="dialog"
         aria-label={isEditing ? "Editar Cotización" : "Nueva Cotización"}
-        className="flex max-h-[96vh] w-full max-w-5xl flex-col rounded-xl border bg-card shadow-2xl"
+        className={
+          isFullscreen
+            ? "flex h-screen w-screen flex-col bg-card"
+            : "flex h-[98vh] max-h-[98vh] w-full max-w-[97vw] 2xl:max-w-[1800px] flex-col rounded-xl border bg-card shadow-2xl transition-all duration-200"
+        }
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header */}
@@ -976,6 +987,21 @@ export function QuoteBuilder({
             >
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
               {loadingAi ? "Diseñando con IA…" : "Sugerir Itinerario con IA"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="text-xs text-text-2 border-border hover:bg-muted"
+              title={isFullscreen ? "Restaurar ventana" : "Pantalla completa"}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="h-3.5 w-3.5 mr-1" />
+              ) : (
+                <Maximize2 className="h-3.5 w-3.5 mr-1" />
+              )}
+              {isFullscreen ? "Ventana" : "Pantalla Completa"}
             </Button>
             <button
               onClick={onClose}
@@ -1016,8 +1042,8 @@ export function QuoteBuilder({
             </button>
 
             {showClient && (
-              <div className="p-4 border-t bg-muted/10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
-                <div className="space-y-1 sm:col-span-2 md:col-span-1">
+              <div className="p-4 border-t bg-muted/10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-3.5">
+                <div className="space-y-1 sm:col-span-2 md:col-span-1 2xl:col-span-2">
                   <label className="text-xs font-semibold text-text-2">Nombre Completo *</label>
                   <Input
                     value={clientName}
