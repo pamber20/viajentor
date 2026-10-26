@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { AlertTriangle, Info, HelpCircle } from "lucide-react";
+import { AlertTriangle, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export interface ConfirmDialogProps {

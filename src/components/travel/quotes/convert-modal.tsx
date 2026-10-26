@@ -16,7 +16,7 @@ export function ConvertQuoteModal({
   onClose: () => void;
   onConverted: (updatedQuote: TravelQuoteDto, leadMoved: boolean) => void;
 }) {
-  const hotelOptions = quote.totals?.byHotel || [];
+  const hotelOptions = useMemo(() => quote.totals?.byHotel || [], [quote.totals?.byHotel]);
   const hasMultipleHotels = hotelOptions.length > 1;
 
   // Detección de opciones comparativas A, B, C
