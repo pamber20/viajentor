@@ -9,6 +9,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 const convertSchema = z.object({
   notes: z.string().trim().optional(),
   selectedHotelId: z.string().trim().optional(),
+  selectedOption: z.enum(["A", "B", "C"]).optional(),
 });
 
 export const POST = withAuth(async (session, req: Request, ctx: RouteContext) => {
@@ -16,6 +17,7 @@ export const POST = withAuth(async (session, req: Request, ctx: RouteContext) =>
   const body = await parseBody(req, convertSchema);
   const notes = body.ok ? body.data.notes : undefined;
   const selectedHotelId = body.ok ? body.data.selectedHotelId : undefined;
+  const selectedOption = body.ok ? body.data.selectedOption : undefined;
 
   try {
     const result = await convertQuoteToBooking({
@@ -24,6 +26,7 @@ export const POST = withAuth(async (session, req: Request, ctx: RouteContext) =>
       actorUserId: session.userId,
       notes,
       selectedHotelId,
+      selectedOption,
     });
 
     return Response.json(result);

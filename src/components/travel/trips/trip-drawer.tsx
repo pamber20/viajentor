@@ -473,7 +473,10 @@ export function TripDrawer({
     }
     try {
       setDownloadingVoucherPdf(true);
-      const hotelItem = quote.days.flatMap((d) => d.items).find((i) => i.type === "Hotel");
+      const allHotels = quote.days.flatMap((d) => d.items).filter((i) => i.type === "Hotel");
+      const hotelItem =
+        (quote.selectedHotelId ? allHotels.find((h) => h.id === quote.selectedHotelId) : null) ||
+        allHotels[0];
       const flightItem = quote.days.flatMap((d) => d.items).find((i) => i.type === "Flight");
       await downloadVoucherPdf({
         ...voucher,

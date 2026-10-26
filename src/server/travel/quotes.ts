@@ -595,6 +595,7 @@ export async function convertQuoteToBooking(input: {
   organizationId: string;
   quoteId: string;
   selectedHotelId?: string | null;
+  selectedOption?: "A" | "B" | "C" | null;
   actorUserId?: string | null;
   notes?: string | null;
 }): Promise<{ quote: TravelQuoteDto; leadMoved: boolean }> {
@@ -608,25 +609,49 @@ export async function convertQuoteToBooking(input: {
     throw new Error("Cotización no encontrada");
   }
 
-  const allHotels = quote.days.flatMap((d) => d.items).filter((i) => i.type === "Hotel");
-  let updatedDays = quote.days;
+  const selectedOpt = input.selectedOption || "A";
   let finalWinningTotal = quote.totals.finalTotal;
 
-  if (input.selectedHotelId || allHotels.length > 0) {
-    const hotelToKeep = input.selectedHotelId || allHotels[0]?.id;
-    if (hotelToKeep) {
-      updatedDays = quote.days.map((day) => ({
-        ...day,
-        items: day.items.filter((item) => item.type !== "Hotel" || item.id === hotelToKeep),
-      }));
-
-      const matchedHotel = quote.totals.byHotel?.find((h) => h.hotelId === hotelToKeep);
-      if (matchedHotel) {
-        finalWinningTotal = matchedHotel.total;
+  // 1. Filtrar por Opción Comparativa (A, B o C) si aplica
+  let filteredDays = quote.days.map((day) => ({
+    ...day,
+    items: day.items.filter((item) => {
+      // Ítems compartidos o sin asignación específica aplican a todas las opciones
+      if (
+        !item.assignedOptions ||
+        item.assignedOptions.length === 0 ||
+        item.assignedOptions.includes("Shared")
+      ) {
+        return true;
       }
+      // Ítems exclusivos de la opción seleccionada
+      return item.assignedOptions.includes(selectedOpt);
+    }),
+  }));
+
+  // Si la cotización tiene desglose por opciones, tomar el total de la opción ganadora
+  const optionTotal = quote.totals?.options?.[selectedOpt]?.total;
+  if (optionTotal && optionTotal > 0) {
+    finalWinningTotal = optionTotal;
+  }
+
+  // 2. Filtrar por Hotel seleccionado si hay opciones de hotel
+  const allHotels = filteredDays.flatMap((d) => d.items).filter((i) => i.type === "Hotel");
+  const hotelToKeep = input.selectedHotelId || allHotels[0]?.id || null;
+
+  if (hotelToKeep && allHotels.length > 1) {
+    filteredDays = filteredDays.map((day) => ({
+      ...day,
+      items: day.items.filter((item) => item.type !== "Hotel" || item.id === hotelToKeep),
+    }));
+
+    const matchedHotel = quote.totals.byHotel?.find((h) => h.hotelId === hotelToKeep);
+    if (matchedHotel) {
+      finalWinningTotal = matchedHotel.total;
     }
   }
 
+  const updatedDays = filteredDays;
   const bookingNumber = quote.bookingNumber ?? (await generateBookingNumber(input.organizationId));
 
   const [updated] = await db
@@ -634,7 +659,9 @@ export async function convertQuoteToBooking(input: {
     .set({
       isBooking: true,
       bookingNumber,
-      selectedHotelId: input.selectedHotelId ?? quote.selectedHotelId ?? (allHotels[0]?.id || null),
+      selectedHotelId: hotelToKeep,
+      isComparisonMode: false,
+      activeOptionsCount: 1,
       days: updatedDays,
       status: "accepted",
       bookingStatus: "confirmed",

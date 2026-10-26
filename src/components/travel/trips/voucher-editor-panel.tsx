@@ -51,9 +51,10 @@ export function VoucherEditorPanel({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Inicialización de estado con datos de la reserva / voucher
-  const hotelItem = quote.days
-    .flatMap((d) => d.items)
-    .find((i) => i.type === "Hotel");
+  const allHotels = quote.days.flatMap((d) => d.items).filter((i) => i.type === "Hotel");
+  const hotelItem =
+    (quote.selectedHotelId ? allHotels.find((h) => h.id === quote.selectedHotelId) : null) ||
+    allHotels[0];
   const flightItem = quote.days
     .flatMap((d) => d.items)
     .find((i) => i.type === "Flight");
@@ -148,9 +149,33 @@ export function VoucherEditorPanel({
   });
 
   // Transfers State
+  const itineraryTransfers: TransferDetail[] = quote.days.flatMap((d) =>
+    d.items
+      .filter((i) => i.type === "Transfer")
+      .map((tr) => ({
+        id: tr.id,
+        type: "airport-hotel" as const,
+        pickupLocation:
+          tr.transferDetails?.pickupPoint || `Aeropuerto de ${quote.destination}`,
+        dropoffLocation:
+          tr.transferDetails?.dropoffPoint ||
+          hotelDetails.name ||
+          `Hotel en ${quote.destination}`,
+        pickupDate: tr.transferDetails?.date || quote.startDate || "",
+        pickupTime: tr.transferDetails?.time || "Según horario de llegada",
+        vehicleType: tr.transferDetails?.vehicleType || "Automóvil / Van",
+        provider: tr.provider || "Operador Receptivo Local",
+        notes:
+          tr.description ||
+          "El chofer esperará con letrero del pasajero en la salida de llegadas",
+      }))
+  );
+
   const [transfers, setTransfers] = useState<TransferDetail[]>(
     initialVoucher?.transfers && initialVoucher.transfers.length > 0
       ? initialVoucher.transfers
+      : itineraryTransfers.length > 0
+      ? itineraryTransfers
       : [
           {
             id: `tr-${Date.now()}-1`,
@@ -169,8 +194,25 @@ export function VoucherEditorPanel({
   );
 
   // Activities State
+  const itineraryActivities: ActivityDetail[] = quote.days.flatMap((d) =>
+    d.items
+      .filter((i) => i.type === "Activity")
+      .map((act) => ({
+        id: act.id,
+        title: act.title,
+        description: act.description || "",
+        date: quote.startDate || "",
+        time: "09:00",
+        location: hotelDetails.name || `Lobby del Hotel (${quote.destination})`,
+        provider: act.provider || "Operador Local",
+        notes: act.description || "",
+      }))
+  );
+
   const [activities, setActivities] = useState<ActivityDetail[]>(
-    initialVoucher?.activities || []
+    initialVoucher?.activities && initialVoucher.activities.length > 0
+      ? initialVoucher.activities
+      : itineraryActivities
   );
 
   // Checklist & General Info
