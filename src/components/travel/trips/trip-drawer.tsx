@@ -6,6 +6,8 @@ import {
   ArrowLeft,
   Calendar,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock,
   DollarSign,
   Edit2,
@@ -153,6 +155,9 @@ export function TripDrawer({
   const [supplierPayRef, setSupplierPayRef] = useState("");
   const [supplierPayNotes, setSupplierPayNotes] = useState("");
   const [savingSupplierPay, setSavingSupplierPay] = useState(false);
+
+  // Acordeón para colapsar toda la sección superior de resumen y métricas
+  const [showOverview, setShowOverview] = useState(true);
 
   // Colapsar datos de facturación en la cabecera para liberar espacio
   const [showBillingHeader, setShowBillingHeader] = useState(false);
@@ -884,6 +889,20 @@ export function TripDrawer({
               <Button
                 size="sm"
                 variant="outline"
+                onClick={() => setShowOverview(!showOverview)}
+                className="h-8 px-2.5 text-xs text-text-2 border-border hover:bg-muted"
+                title={showOverview ? "Ocultar resumen del viaje" : "Ver resumen del viaje"}
+              >
+                {showOverview ? (
+                  <ChevronUp className="h-3.5 w-3.5 mr-1 text-brand" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5 mr-1 text-brand" />
+                )}
+                {showOverview ? "Ocultar Resumen" : "Ver Resumen"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={() => setIsFullscreen(!isFullscreen)}
                 className="h-8 px-2.5 text-xs text-text-2 border-border hover:bg-muted"
                 title={isFullscreen ? "Restaurar tamaño lateral" : "Pantalla completa"}
@@ -907,143 +926,189 @@ export function TripDrawer({
             </div>
           </div>
 
-          {/* Info bar with destination, dates and customer info */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-card p-3 rounded-xl border text-xs">
-            <div>
-              <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
-                Destino
-              </span>
-              <span className="font-semibold text-foreground flex items-center gap-1 mt-0.5 truncate">
-                <MapPin className="h-3 w-3 text-brand shrink-0" />
-                {quote.destination}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
-                Salida y Noches
-              </span>
-              <span className="font-semibold text-foreground mt-0.5 block">
-                {quote.startDate || "N/A"} ({quote.nights} noches)
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
-                Contacto Principal
-              </span>
-              <span className="font-semibold text-foreground mt-0.5 block truncate">
-                {quote.clientPhone || quote.clientEmail || "Sin datos"}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
-                Pasajeros
-              </span>
-              <span className="font-semibold text-foreground mt-0.5 block">
-                {quote.passengers} adultos {quote.childPassengers > 0 ? `+ ${quote.childPassengers} niños` : ""}
-              </span>
-            </div>
-          </div>
-
-          {/* Metrics summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="rounded-xl border bg-card p-3.5 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
-                  Total del Viaje
+          {/* Barra compacta cuando la sección está colapsada */}
+          {!showOverview && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-2.5 px-3.5 text-xs shadow-2xs">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-text-2">
+                <span className="font-bold text-foreground flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-brand shrink-0" />
+                  {quote.destination}
                 </span>
-                <DollarSign className="h-4 w-4 text-emerald-500" />
-              </div>
-              <span className="text-xl font-extrabold text-foreground block">
-                {formatCurrency(quote.totals.finalTotal, quote.currency)}
-              </span>
-              <span className="text-[11px] text-emerald-600 font-semibold block">
-                Inversión confirmada
-              </span>
-            </div>
-
-            <div className="rounded-xl border bg-card p-3.5 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
-                  Saldo Pendiente
+                <span className="text-text-3 hidden sm:inline">•</span>
+                <span>
+                  <strong className="text-foreground">Salida:</strong> {quote.startDate || "N/A"} ({quote.nights} noches)
                 </span>
-                <AlertCircle className="h-4 w-4 text-amber-500" />
-              </div>
-              <span className="text-xl font-extrabold text-amber-600 block">
-                {formatCurrency(balanceRemaining, quote.currency)}
-              </span>
-              <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden mt-1.5">
-                <div
-                  className="bg-emerald-500 h-full transition-all"
-                  style={{ width: `${percentagePaid}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="rounded-xl border bg-card p-3.5 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
-                  Por Programar
+                <span className="text-text-3 hidden sm:inline">•</span>
+                <span>
+                  <strong className="text-foreground">Pasajeros:</strong> {quote.passengers} adultos
+                  {quote.childPassengers > 0 ? ` + ${quote.childPassengers} niños` : ""}
                 </span>
-                <Clock className="h-4 w-4 text-brand" />
               </div>
-              <span className="text-xl font-extrabold text-foreground block">
-                {formatCurrency(remainingToSchedule, quote.currency)}
-              </span>
-              <span className="text-[11px] text-text-3 font-semibold block">
-                {(quote.amortizationSchedule || []).length} cuotas pactadas
-              </span>
-            </div>
-          </div>
 
-          {/* Billing & Counter details (Colapsable para no tapar el contenido de las pestañas) */}
-          <div className="rounded-xl border bg-card p-2.5 space-y-2">
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setShowBillingHeader(!showBillingHeader)}
-                className="text-xs font-bold text-text-2 hover:text-foreground flex items-center gap-1.5"
-              >
-                <span>Datos de Facturación & Counter</span>
-                <span className="text-[10px] text-text-3 font-normal">
-                  {showBillingHeader ? "(Ocultar)" : "(Ver/Editar)"}
-                </span>
-              </button>
-              {showBillingHeader && (
-                <Button
+              <div className="flex items-center gap-3 sm:gap-5">
+                <div className="flex items-center gap-3">
+                  <span className="text-text-3">
+                    Inversión: <strong className="text-foreground font-extrabold">{formatCurrency(quote.totals.finalTotal, quote.currency)}</strong>
+                  </span>
+                  <span className="text-text-3">•</span>
+                  <span className="text-text-3">
+                    Saldo Pendiente: <strong className="text-amber-600 font-extrabold">{formatCurrency(balanceRemaining, quote.currency)}</strong>
+                  </span>
+                </div>
+                <button
                   type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-6 text-[11px]"
-                  onClick={handleSaveBilling}
-                  disabled={savingBilling}
+                  onClick={() => setShowOverview(true)}
+                  className="text-brand hover:underline font-semibold text-xs flex items-center gap-1"
                 >
-                  {savingBilling ? "Guardando..." : "Guardar Facturación"}
-                </Button>
-              )}
-            </div>
-            {showBillingHeader && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t pt-2">
-                <Input
-                  placeholder="A quién facturamos (Razón Social / Nombre)"
-                  value={billingName}
-                  onChange={(e) => setBillingName(e.target.value)}
-                  className="h-8 text-xs"
-                />
-                <Input
-                  placeholder="NIT / Documento Factura"
-                  value={billingId}
-                  onChange={(e) => setBillingId(e.target.value)}
-                  className="h-8 text-xs"
-                />
-                <Input
-                  placeholder="Counter Responsable"
-                  value={counterName}
-                  onChange={(e) => setCounterName(e.target.value)}
-                  className="h-8 text-xs"
-                />
+                  <span>Expandir</span>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Bloque completo cuando la sección está expandida */}
+          {showOverview && (
+            <>
+              {/* Info bar with destination, dates and customer info */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-card p-3 rounded-xl border text-xs">
+                <div>
+                  <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
+                    Destino
+                  </span>
+                  <span className="font-semibold text-foreground flex items-center gap-1 mt-0.5 truncate">
+                    <MapPin className="h-3 w-3 text-brand shrink-0" />
+                    {quote.destination}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
+                    Salida y Noches
+                  </span>
+                  <span className="font-semibold text-foreground mt-0.5 block">
+                    {quote.startDate || "N/A"} ({quote.nights} noches)
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
+                    Contacto Principal
+                  </span>
+                  <span className="font-semibold text-foreground mt-0.5 block truncate">
+                    {quote.clientPhone || quote.clientEmail || "Sin datos"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
+                    Pasajeros
+                  </span>
+                  <span className="font-semibold text-foreground mt-0.5 block">
+                    {quote.passengers} adultos {quote.childPassengers > 0 ? `+ ${quote.childPassengers} niños` : ""}
+                  </span>
+                </div>
+              </div>
+
+              {/* Metrics summary cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border bg-card p-3.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
+                      Total del Viaje
+                    </span>
+                    <DollarSign className="h-4 w-4 text-emerald-500" />
+                  </div>
+                  <span className="text-xl font-extrabold text-foreground block">
+                    {formatCurrency(quote.totals.finalTotal, quote.currency)}
+                  </span>
+                  <span className="text-[11px] text-emerald-600 font-semibold block">
+                    Inversión confirmada
+                  </span>
+                </div>
+
+                <div className="rounded-xl border bg-card p-3.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
+                      Saldo Pendiente
+                    </span>
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                  </div>
+                  <span className="text-xl font-extrabold text-amber-600 block">
+                    {formatCurrency(balanceRemaining, quote.currency)}
+                  </span>
+                  <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden mt-1.5">
+                    <div
+                      className="bg-emerald-500 h-full transition-all"
+                      style={{ width: `${percentagePaid}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-card p-3.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
+                      Por Programar
+                    </span>
+                    <Clock className="h-4 w-4 text-brand" />
+                  </div>
+                  <span className="text-xl font-extrabold text-foreground block">
+                    {formatCurrency(remainingToSchedule, quote.currency)}
+                  </span>
+                  <span className="text-[11px] text-text-3 font-semibold block">
+                    {(quote.amortizationSchedule || []).length} cuotas pactadas
+                  </span>
+                </div>
+              </div>
+
+              {/* Billing & Counter details (Colapsable para no tapar el contenido de las pestañas) */}
+              <div className="rounded-xl border bg-card p-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowBillingHeader(!showBillingHeader)}
+                    className="text-xs font-bold text-text-2 hover:text-foreground flex items-center gap-1.5"
+                  >
+                    <span>Datos de Facturación & Counter</span>
+                    <span className="text-[10px] text-text-3 font-normal">
+                      {showBillingHeader ? "(Ocultar)" : "(Ver/Editar)"}
+                    </span>
+                  </button>
+                  {showBillingHeader && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[11px]"
+                      onClick={handleSaveBilling}
+                      disabled={savingBilling}
+                    >
+                      {savingBilling ? "Guardando..." : "Guardar Facturación"}
+                    </Button>
+                  )}
+                </div>
+                {showBillingHeader && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t pt-2">
+                    <Input
+                      placeholder="A quién facturamos (Razón Social / Nombre)"
+                      value={billingName}
+                      onChange={(e) => setBillingName(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                    <Input
+                      placeholder="NIT / Documento Factura"
+                      value={billingId}
+                      onChange={(e) => setBillingId(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                    <Input
+                      placeholder="Counter Responsable"
+                      value={counterName}
+                      onChange={(e) => setCounterName(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </header>
 
         {/* Navigation Tabs */}
