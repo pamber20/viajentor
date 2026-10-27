@@ -86,6 +86,7 @@ export function PackagesClient() {
       return (
         pkg.title.toLowerCase().includes(q) ||
         pkg.destination.toLowerCase().includes(q) ||
+        (Boolean(pkg.originCity) && pkg.originCity!.toLowerCase().includes(q)) ||
         pkg.description?.toLowerCase().includes(q)
       );
     });
@@ -365,7 +366,9 @@ export function PackagesClient() {
 
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-primary mt-1 mb-3">
                     <MapPin className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{pkg.destination}</span>
+                    <span className="truncate">
+                      {pkg.originCity ? `${pkg.originCity} ➔ ${pkg.destination}` : pkg.destination}
+                    </span>
                   </div>
 
                   {pkg.description && (

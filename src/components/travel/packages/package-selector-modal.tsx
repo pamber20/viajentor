@@ -72,8 +72,9 @@ export function PackageSelectorModal({
       const q = search.toLowerCase();
       const matchTitle = pkg.title.toLowerCase().includes(q);
       const matchDest = pkg.destination.toLowerCase().includes(q);
+      const matchOrigin = Boolean(pkg.originCity) && pkg.originCity!.toLowerCase().includes(q);
       const matchDesc = pkg.description?.toLowerCase().includes(q);
-      return matchTitle || matchDest || matchDesc;
+      return matchTitle || matchDest || matchOrigin || matchDesc;
     });
   }, [packages, filterActiveOnly, search]);
 
@@ -206,7 +207,7 @@ export function PackageSelectorModal({
                         <div className="flex items-center gap-1.5">
                           <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
                           <span className="font-medium text-foreground truncate">
-                            {pkg.destination}
+                            {pkg.originCity ? `${pkg.originCity} ➔ ${pkg.destination}` : pkg.destination}
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">

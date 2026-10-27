@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  ArrowLeftRight,
   Calendar,
   DollarSign,
   FileText,
@@ -34,6 +35,15 @@ import type {
   PackageStatus,
   TravelPackageDto,
 } from "@/server/travel/packages";
+import { AIRPORT_DATA, type AirportItem } from "@/components/travel/quotes/quote-builder";
+
+interface TravelPayoutsItem {
+  name?: string;
+  city_name?: string;
+  country_name?: string;
+  type?: string;
+  code?: string;
+}
 
 export function PackageBuilder({
   initialPackage,
@@ -54,12 +64,128 @@ export function PackageBuilder({
   const [title, setTitle] = useState(initialPackage?.title ?? "");
   const [description, setDescription] = useState(initialPackage?.description ?? "");
   const [destination, setDestination] = useState(initialPackage?.destination ?? "");
-  const [originCity, _setOriginCity] = useState(initialPackage?.originCity ?? "");
-  const [departureAirport, _setDepartureAirport] = useState(initialPackage?.departureAirport ?? "");
-  const [arrivalAirport, _setArrivalAirport] = useState(initialPackage?.arrivalAirport ?? "");
-  const [flightType, _setFlightType] = useState<"round-trip" | "one-way">(
+  const [originCity, setOriginCity] = useState(initialPackage?.originCity ?? "");
+  const [departureAirport, setDepartureAirport] = useState(initialPackage?.departureAirport ?? "");
+  const [arrivalAirport, setArrivalAirport] = useState(initialPackage?.arrivalAirport ?? "");
+  const [flightType, setFlightType] = useState<"round-trip" | "one-way">(
     initialPackage?.flightType ?? "round-trip"
   );
+
+  const [showOriginSuggs, setShowOriginSuggs] = useState(false);
+  const [showDestSuggs, setShowDestSuggs] = useState(false);
+  const [originSuggestions, setOriginSuggestions] = useState<AirportItem[]>(
+    AIRPORT_DATA.slice(0, 6)
+  );
+  const [destSuggestions, setDestSuggestions] = useState<AirportItem[]>(
+    AIRPORT_DATA.slice(0, 6)
+  );
+  const [isSearchingOrigin, setIsSearchingOrigin] = useState(false);
+  const [isSearchingDest, setIsSearchingDest] = useState(false);
+
+  useEffect(() => {
+    if (!originCity || originCity.trim().length < 2) {
+      setOriginSuggestions(AIRPORT_DATA.slice(0, 6));
+      return;
+    }
+    const term = originCity.trim();
+    const timer = setTimeout(async () => {
+      setIsSearchingOrigin(true);
+      try {
+        const res = await fetch(
+          `https://autocomplete.travelpayouts.com/places2?term=${encodeURIComponent(
+            term
+          )}&locale=es&types[]=airport&types[]=city`
+        );
+        if (res.ok) {
+          const data = (await res.json()) as TravelPayoutsItem[];
+          if (Array.isArray(data) && data.length > 0) {
+            const mapped: AirportItem[] = data.map((item) => ({
+              city: item.city_name || item.name || "",
+              region: item.country_name || "",
+              airport: item.type === "airport" ? item.name || "" : "Todos los aeropuertos",
+              code: item.code || "",
+            }));
+            setOriginSuggestions(mapped.slice(0, 8));
+            return;
+          }
+        }
+      } catch {
+        // Fallback local en caso de error de red
+      } finally {
+        setIsSearchingOrigin(false);
+      }
+      const q = term.toLowerCase();
+      const local = AIRPORT_DATA.filter(
+        (a) =>
+          a.city.toLowerCase().includes(q) ||
+          a.airport.toLowerCase().includes(q) ||
+          a.code.toLowerCase().includes(q) ||
+          a.region.toLowerCase().includes(q)
+      );
+      setOriginSuggestions(
+        local.length > 0 ? local.slice(0, 8) : AIRPORT_DATA.slice(0, 6)
+      );
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [originCity]);
+
+  useEffect(() => {
+    if (!destination || destination.trim().length < 2) {
+      setDestSuggestions(AIRPORT_DATA.slice(0, 6));
+      return;
+    }
+    const term = destination.trim();
+    const timer = setTimeout(async () => {
+      setIsSearchingDest(true);
+      try {
+        const res = await fetch(
+          `https://autocomplete.travelpayouts.com/places2?term=${encodeURIComponent(
+            term
+          )}&locale=es&types[]=airport&types[]=city`
+        );
+        if (res.ok) {
+          const data = (await res.json()) as TravelPayoutsItem[];
+          if (Array.isArray(data) && data.length > 0) {
+            const mapped: AirportItem[] = data.map((item) => ({
+              city: item.city_name || item.name || "",
+              region: item.country_name || "",
+              airport: item.type === "airport" ? item.name || "" : "Todos los aeropuertos",
+              code: item.code || "",
+            }));
+            setDestSuggestions(mapped.slice(0, 8));
+            return;
+          }
+        }
+      } catch {
+        // Fallback local en caso de error de red
+      } finally {
+        setIsSearchingDest(false);
+      }
+      const q = term.toLowerCase();
+      const local = AIRPORT_DATA.filter(
+        (a) =>
+          a.city.toLowerCase().includes(q) ||
+          a.airport.toLowerCase().includes(q) ||
+          a.code.toLowerCase().includes(q) ||
+          a.region.toLowerCase().includes(q)
+      );
+      setDestSuggestions(
+        local.length > 0 ? local.slice(0, 8) : AIRPORT_DATA.slice(0, 6)
+      );
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [destination]);
+
+  function handleSwapLocations() {
+    const tempCity = originCity;
+    const tempApt = departureAirport;
+    setOriginCity(destination);
+    setDepartureAirport(arrivalAirport);
+    setDestination(tempCity);
+    setArrivalAirport(tempApt);
+  }
   const [startDate, setStartDate] = useState(initialPackage?.startDate ?? "");
   const [endDate, setEndDate] = useState(initialPackage?.endDate ?? "");
   const [nights, setNights] = useState<number>(initialPackage?.nights ?? 4);
@@ -441,17 +567,190 @@ export function PackageBuilder({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <label className="text-xs font-semibold text-foreground">
-                      Destino principal *
-                    </label>
+                {/* Origen y Destino con Sugerencias en Vivo y Botón de Swap */}
+                <div className="flex flex-col sm:flex-row items-start gap-2">
+                  {/* Origen */}
+                  <div className="relative space-y-1 flex-1 w-full">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-foreground">
+                        Ciudad o Aeropuerto de Origen
+                      </label>
+                      {originCity && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOriginCity("");
+                            setDepartureAirport("");
+                          }}
+                          className="text-[11px] text-muted-foreground hover:text-foreground"
+                        >
+                          Limpiar
+                        </button>
+                      )}
+                    </div>
                     <Input
-                      required
-                      placeholder="Ej. Cancún, México o San Andrés"
-                      value={destination}
-                      onChange={(e) => setDestination(e.target.value)}
+                      value={originCity}
+                      onChange={(e) => {
+                        setOriginCity(e.target.value);
+                        setShowOriginSuggs(true);
+                      }}
+                      onFocus={() => setShowOriginSuggs(true)}
+                      placeholder="Ej. Bogotá (BOG), Medellín (MDE)..."
                     />
+                    {departureAirport && !showOriginSuggs && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium px-1 pt-0.5">
+                        <span>🛫 Aeropuerto salida:</span>
+                        <span className="font-semibold">{departureAirport}</span>
+                      </div>
+                    )}
+                    {showOriginSuggs && (
+                      <div className="absolute top-full left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-xl border bg-popover p-1.5 shadow-xl animate-in fade-in slide-in-from-top-1">
+                        <div className="flex items-center justify-between px-2.5 py-1 text-[11px] font-bold text-muted-foreground border-b mb-1">
+                          <span>{isSearchingOrigin ? "Buscando aeropuertos..." : "Aeropuertos de Origen"}</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowOriginSuggs(false)}
+                            className="text-muted-foreground hover:text-foreground text-xs"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {originSuggestions.map((a, idx) => (
+                          <button
+                            key={`${a.code}-${a.city}-${idx}-origin`}
+                            type="button"
+                            onClick={() => {
+                              setOriginCity(a.city);
+                              setDepartureAirport(`${a.airport} (${a.code})`);
+                              setShowOriginSuggs(false);
+                            }}
+                            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-muted/80 rounded-lg transition group"
+                          >
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">
+                                {a.city}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground truncate">{a.region}</span>
+                            </div>
+                            <div className="flex flex-col items-end shrink-0 text-right">
+                              <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                {a.code}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground truncate max-w-[130px] mt-0.5">
+                                {a.airport}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Botón Swap / Invertir Trayecto */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleSwapLocations}
+                    title="Invertir origen y destino"
+                    className="h-8 w-8 rounded-full border bg-muted/40 hover:bg-muted self-center mt-3 sm:mt-5 shrink-0"
+                  >
+                    <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+
+                  {/* Destino */}
+                  <div className="relative space-y-1 flex-1 w-full">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-foreground">
+                        Ciudad o Destino Turístico *
+                      </label>
+                      {destination && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDestination("");
+                            setArrivalAirport("");
+                          }}
+                          className="text-[11px] text-muted-foreground hover:text-foreground"
+                        >
+                          Limpiar
+                        </button>
+                      )}
+                    </div>
+                    <Input
+                      value={destination}
+                      onChange={(e) => {
+                        setDestination(e.target.value);
+                        setShowDestSuggs(true);
+                      }}
+                      onFocus={() => setShowDestSuggs(true)}
+                      placeholder="Ej. Cancún, Madrid, San Andrés..."
+                      required
+                    />
+                    {arrivalAirport && !showDestSuggs && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium px-1 pt-0.5">
+                        <span>✈️ Aeropuerto llegada:</span>
+                        <span className="font-semibold">{arrivalAirport}</span>
+                      </div>
+                    )}
+                    {showDestSuggs && (
+                      <div className="absolute top-full left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-xl border bg-popover p-1.5 shadow-xl animate-in fade-in slide-in-from-top-1">
+                        <div className="flex items-center justify-between px-2.5 py-1 text-[11px] font-bold text-muted-foreground border-b mb-1">
+                          <span>{isSearchingDest ? "Buscando destinos..." : "Ciudades y Aeropuertos"}</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowDestSuggs(false)}
+                            className="text-muted-foreground hover:text-foreground text-xs"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {destSuggestions.map((a, idx) => (
+                          <button
+                            key={`${a.code}-${a.city}-${idx}-dest`}
+                            type="button"
+                            onClick={() => {
+                              setDestination(a.city);
+                              setArrivalAirport(`${a.airport} (${a.code})`);
+                              setShowDestSuggs(false);
+                            }}
+                            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-muted/80 rounded-lg transition group"
+                          >
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">
+                                {a.city}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground truncate">{a.region}</span>
+                            </div>
+                            <div className="flex flex-col items-end shrink-0 text-right">
+                              <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                {a.code}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground truncate max-w-[130px] mt-0.5">
+                                {a.airport}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fechas y Tipo de Vuelo */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">
+                      Tipo de Vuelo / Trayecto
+                    </label>
+                    <select
+                      value={flightType}
+                      onChange={(e) => setFlightType(e.target.value as "round-trip" | "one-way")}
+                      className="w-full rounded-sm border bg-background px-3 py-2 text-xs font-semibold text-foreground"
+                    >
+                      <option value="round-trip">Ida y Vuelta (Round Trip)</option>
+                      <option value="one-way">Solo Ida (One Way)</option>
+                    </select>
                   </div>
 
                   <div className="space-y-1.5">
@@ -472,7 +771,7 @@ export function PackageBuilder({
                     </label>
                     <Input
                       type="date"
-                      required
+                      required={flightType === "round-trip"}
                       value={endDate}
                       onChange={(e) => handleEndDateChange(e.target.value)}
                     />

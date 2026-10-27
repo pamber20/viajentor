@@ -249,7 +249,11 @@ export function QuoteBuilder({
   const [savingAsPackage, setSavingAsPackage] = useState(false);
 
   function applyPackage(pkg: TravelPackageDto) {
+    if (pkg.originCity) setOriginCity(pkg.originCity);
+    if (pkg.departureAirport) setDepartureAirport(pkg.departureAirport);
     if (pkg.destination) setDestination(pkg.destination);
+    if (pkg.arrivalAirport) setArrivalAirport(pkg.arrivalAirport);
+    if (pkg.flightType) setFlightType(pkg.flightType);
     if (pkg.startDate) setStartDate(pkg.startDate);
     if (pkg.endDate) setEndDate(pkg.endDate);
     if (pkg.nights) setNights(pkg.nights);
@@ -305,6 +309,10 @@ export function QuoteBuilder({
           title: packageTitle.trim(),
           description: packageDescription.trim() || undefined,
           destination: destination.trim(),
+          originCity: originCity.trim() || undefined,
+          departureAirport: departureAirport.trim() || undefined,
+          arrivalAirport: arrivalAirport.trim() || undefined,
+          flightType,
           startDate: startDate || null,
           endDate: endDate || null,
           nights: Number(nights) || 0,
@@ -2771,7 +2779,10 @@ export function QuoteBuilder({
                 <div className="font-medium text-foreground">
                   Información que se guardará en la plantilla:
                 </div>
-                <div>• Destino: <b>{destination || "Sin especificar"}</b></div>
+                {originCity && (
+                  <div>• Origen: <b>{originCity}</b> {departureAirport ? `(${departureAirport})` : ""}</div>
+                )}
+                <div>• Destino: <b>{destination || "Sin especificar"}</b> {arrivalAirport ? `(${arrivalAirport})` : ""}</div>
                 <div>• Fechas: <b>{startDate || "Sin fecha"} al {endDate || "Sin fecha"}</b> ({nights} noches)</div>
                 <div>• Itinerario: <b>{days.length} días configurados</b></div>
                 <div className="text-[11px] text-primary pt-1">
