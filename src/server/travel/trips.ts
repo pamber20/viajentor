@@ -8,7 +8,7 @@ import type {
   TransferDetail,
   Traveler,
 } from "@/lib/travel/types";
-import { getQuote } from "./quotes";
+import { getQuote, serializeQuote } from "./quotes";
 
 export interface TravelPaymentDto {
   id: string;
@@ -458,5 +458,168 @@ export async function upsertVoucher(input: UpsertVoucherInput): Promise<TravelVo
     additionalInfo: inserted.additionalInfo,
     createdAt: inserted.createdAt.toISOString(),
     updatedAt: inserted.updatedAt.toISOString(),
+  };
+}
+
+export interface VoucherListItemDto {
+  voucher: TravelVoucherDto | null;
+  quoteId: string;
+  quoteNumber: string;
+  bookingNumber: string | null;
+  destination: string;
+  startDate: string | null;
+  endDate: string | null;
+  clientName: string;
+  clientPhone: string | null;
+  clientEmail: string | null;
+  passengers: number;
+  childPassengers: number;
+  totalPrice: number;
+  currency: string;
+  status: string;
+  hasVoucher: boolean;
+  services: {
+    hasFlight: boolean;
+    hasHotel: boolean;
+    hasTransfers: boolean;
+    hasActivities: boolean;
+    hasAssistance: boolean;
+  };
+}
+
+export async function listVouchers(organizationId: string): Promise<{
+  items: VoucherListItemDto[];
+  metrics: {
+    totalIssued: number;
+    upcomingTravel: number;
+    pendingVouchers: number;
+  };
+}> {
+  const db = getDb();
+
+  // Obtenemos todas las reservas de viajes (isBooking = true) de la organización
+  const quotes = await db
+    .select()
+    .from(schema.travelQuote)
+    .where(
+      scoped(
+        schema.travelQuote.organizationId,
+        organizationId,
+        eq(schema.travelQuote.isBooking, true)
+      )
+    )
+    .orderBy(desc(schema.travelQuote.createdAt));
+
+  // Obtenemos todos los vouchers de la organización
+  const vouchers = await db
+    .select()
+    .from(schema.travelVoucher)
+    .where(scoped(schema.travelVoucher.organizationId, organizationId));
+
+  const voucherMap = new Map<string, typeof schema.travelVoucher.$inferSelect>();
+  for (const v of vouchers) {
+    voucherMap.set(v.quoteId, v);
+  }
+
+  const now = new Date();
+  const next15Days = new Date();
+  next15Days.setDate(next15Days.getDate() + 15);
+
+  let totalIssued = 0;
+  let upcomingTravel = 0;
+  let pendingVouchers = 0;
+
+  const items: VoucherListItemDto[] = quotes.map((rawQ) => {
+    const q = serializeQuote(rawQ);
+    const rawV = voucherMap.get(q.id);
+    const hasVoucher = Boolean(rawV);
+
+    if (hasVoucher) {
+      totalIssued++;
+    } else {
+      pendingVouchers++;
+    }
+
+    if (q.startDate) {
+      const travelDate = new Date(q.startDate);
+      if (!isNaN(travelDate.getTime()) && travelDate >= now && travelDate <= next15Days) {
+        upcomingTravel++;
+      }
+    }
+
+    const vDto: TravelVoucherDto | null = rawV
+      ? {
+          id: rawV.id,
+          organizationId: rawV.organizationId,
+          quoteId: rawV.quoteId,
+          voucherNumber: rawV.voucherNumber,
+          travelers: (rawV.travelers ?? []) as Traveler[],
+          checkInReminder: rawV.checkInReminder,
+          documentsChecklist: rawV.documentsChecklist ?? [],
+          hotelDetails: rawV.hotelDetails ?? null,
+          flightDetails: rawV.flightDetails ?? null,
+          serviceDetails: rawV.serviceDetails ?? null,
+          transfers: (rawV.transfers ?? []) as TransferDetail[],
+          transfersConfirmationNumber: rawV.transfersConfirmationNumber,
+          activities: (rawV.activities ?? []) as ActivityDetail[],
+          assistanceInfo: rawV.assistanceInfo ?? null,
+          additionalInfo: rawV.additionalInfo,
+          createdAt: rawV.createdAt.toISOString(),
+          updatedAt: rawV.updatedAt.toISOString(),
+        }
+      : null;
+
+    // Calculamos qué servicios están amparados
+    const qDays = q.days ?? [];
+    const hasFlight = Boolean(
+      vDto?.flightDetails?.airline ||
+        vDto?.flightDetails?.flightNumber ||
+        qDays.some((d) => d.items?.some((i) => i.type === "Flight"))
+    );
+    const hasHotel = Boolean(
+      vDto?.hotelDetails?.name ||
+        q.selectedHotelId ||
+        qDays.some((d) => d.items?.some((i) => i.type === "Hotel"))
+    );
+    const hasTransfers = Boolean((vDto?.transfers?.length ?? 0) > 0);
+    const hasActivities = Boolean((vDto?.activities?.length ?? 0) > 0);
+    const hasAssistance = Boolean(
+      vDto?.assistanceInfo?.provider || (q.medicalAssistance && q.medicalAssistance > 0)
+    );
+
+    return {
+      voucher: vDto,
+      quoteId: q.id,
+      quoteNumber: q.quoteNumber,
+      bookingNumber: q.bookingNumber,
+      destination: q.destination,
+      startDate: q.startDate,
+      endDate: q.endDate,
+      clientName: q.clientName,
+      clientPhone: q.clientPhone,
+      clientEmail: q.clientEmail,
+      passengers: q.passengers,
+      childPassengers: q.childPassengers,
+      totalPrice: q.totals.finalTotal,
+      currency: q.currency,
+      status: q.bookingStatus ?? q.status,
+      hasVoucher,
+      services: {
+        hasFlight,
+        hasHotel,
+        hasTransfers,
+        hasActivities,
+        hasAssistance,
+      },
+    };
+  });
+
+  return {
+    items,
+    metrics: {
+      totalIssued,
+      upcomingTravel,
+      pendingVouchers,
+    },
   };
 }

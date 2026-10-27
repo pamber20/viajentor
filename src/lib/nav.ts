@@ -11,6 +11,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Ticket,
   Users,
   Wallet,
   type LucideIcon,
@@ -79,6 +80,7 @@ export function appNavGroups({
     viajes.push(
       { href: "/quotes", label: "Cotizaciones", icon: FileText },
       { href: "/trips", label: "Viajes", icon: Plane },
+      { href: "/vouchers", label: "Vouchers", icon: Ticket },
       { href: "/payments", label: "Abonos y Cartera", icon: Wallet },
       { href: "/suppliers", label: "Proveedores", icon: Building2 }
     );

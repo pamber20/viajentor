@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   ArrowLeft,
@@ -11,17 +12,19 @@ import {
   Clock,
   DollarSign,
   Edit2,
+  ExternalLink,
   FileDown,
-  FileText,
   Handshake,
   Loader2,
   MapPin,
   Maximize2,
+  MessageCircle,
   Minimize2,
   Pencil,
   Plane,
   Plus,
   Printer,
+  Ticket,
   Trash2,
   UserPlus,
   Users,
@@ -46,7 +49,6 @@ import {
   downloadReceiptPdf,
   downloadVoucherPdf,
 } from "@/components/travel/pdf";
-import { VoucherEditorPanel } from "./voucher-editor-panel";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 
@@ -1119,7 +1121,7 @@ export function TripDrawer({
             { id: "passengers", label: `Pasajeros (${travelers.length})`, icon: Users },
             { id: "supplierPayments", label: `Proveedores (${supplierItems.length})`, icon: Handshake },
             { id: "operations", label: "Operación", icon: Plane },
-            { id: "vouchers", label: "Voucher", icon: FileText },
+            { id: "vouchers", label: "Voucher", icon: Ticket },
           ].map((tab) => {
             const Icon = tab.icon;
             const isSelected = activeTab === tab.id;
@@ -2068,18 +2070,115 @@ export function TripDrawer({
             </div>
           )}
 
-          {/* 6. Vouchers (Editor Fino Integrado In-line) */}
+          {/* 6. Vouchers (Resumen limpio y acceso directo a la sección de Vouchers) */}
           {activeTab === "vouchers" && (
-            <VoucherEditorPanel
-              quote={quote}
-              initialVoucher={voucher}
-              onSaved={(updatedVoucher) => {
-                setVoucher(updatedVoucher);
-              }}
-              onDownloadPdf={() => void handleDownloadVoucherPdf()}
-              isDownloadingPdf={downloadingVoucherPdf}
-              onCopyWhatsApp={handleCopyVoucherText}
-            />
+            <div className="mx-auto max-w-3xl space-y-4 py-6">
+              <div className="rounded-lg border bg-card p-6 shadow-xs">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-soft text-brand-text">
+                        <Ticket className="h-4 w-4" />
+                      </span>
+                      <h3 className="text-base font-bold text-foreground">
+                        Voucher de Servicios
+                      </h3>
+                    </div>
+                    <p className="mt-1 text-xs text-text-3">
+                      Comprobante oficial de servicios turísticos confirmados para el pasajero y proveedores.
+                    </p>
+                  </div>
+
+                  {voucher ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-3 py-1 font-mono text-xs font-bold text-success-text">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {voucher.voucherNumber}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-bold text-text-3">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      Pendiente de emisión
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div className="space-y-2 rounded-md bg-subtle/50 p-3">
+                    <p className="font-semibold text-foreground">Detalle del viaje amparado</p>
+                    <div className="space-y-1 text-text-2">
+                      <p><strong>Destino:</strong> {quote.destination}</p>
+                      <p><strong>Titular:</strong> {quote.clientName}</p>
+                      <p><strong>Fechas:</strong> {quote.startDate ?? "Por definir"} a {quote.endDate ?? "Por definir"}</p>
+                      <p><strong>Pasajeros:</strong> {travelers.length || quote.passengers} pax</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-md bg-subtle/50 p-3">
+                    <p className="font-semibold text-foreground">Servicios en el voucher</p>
+                    <div className="space-y-1 text-text-2">
+                      <p>
+                        <strong>Alojamiento:</strong>{" "}
+                        {voucher?.hotelDetails?.name || (quote.selectedHotelId ? "Hotel seleccionado" : "Por configurar")}
+                      </p>
+                      <p>
+                        <strong>Vuelos:</strong>{" "}
+                        {voucher?.flightDetails?.airline
+                          ? `${voucher.flightDetails.airline} (${voucher.flightDetails.flightNumber ?? "---"})`
+                          : "Por configurar"}
+                      </p>
+                      <p>
+                        <strong>Traslados:</strong>{" "}
+                        {(voucher?.transfers?.length ?? 0) > 0 ? `${voucher?.transfers.length} servicio(s)` : "Ninguno"}
+                      </p>
+                      <p>
+                        <strong>Actividades:</strong>{" "}
+                        {(voucher?.activities?.length ?? 0) > 0 ? `${voucher?.activities.length} tour(s)` : "Ninguna"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {voucher && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void handleDownloadVoucherPdf()}
+                          disabled={downloadingVoucherPdf}
+                          className="gap-1.5"
+                        >
+                          {downloadingVoucherPdf ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-brand" />
+                          ) : (
+                            <FileDown className="h-4 w-4" />
+                          )}
+                          <span>Descargar PDF</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCopyVoucherText}
+                          className="gap-1.5"
+                        >
+                          <MessageCircle className="h-4 w-4 text-emerald-600" />
+                          <span>Copiar para WhatsApp</span>
+                        </Button>
+                      </>
+                    )}
+                  </div>
+
+                  <Link
+                    href={`/vouchers?quoteId=${quote.id}`}
+                    className="inline-flex items-center gap-1.5 rounded-sm bg-brand px-4 py-2 text-xs font-semibold text-brand-fg hover:opacity-90 transition-opacity"
+                  >
+                    <span>{voucher ? "Gestionar en sección Vouchers" : "Emitir Voucher en Vouchers"}</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
