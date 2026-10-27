@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, ShieldAlert } from "lucide-react";
-import type { Branding } from "@/lib/branding";
+import { accentCssVariables, type Branding } from "@/lib/branding";
 import type { ThemePreference } from "@/lib/theme";
 import type { ResolvedCommit } from "@/lib/version";
 import type { AccessibleOrganization } from "@/server/tenants";
@@ -80,6 +80,19 @@ export function AppShell({
 
   const primaryOrg = accessibleOrganizations.find((o) => o.slug === "principal");
 
+  // Sincroniza dinámicamente las variables de color de la agencia activa en el documento
+  useEffect(() => {
+    if (!branding?.accent) return;
+    const css = accentCssVariables(branding.accent);
+    let tag = document.getElementById("active-agency-theme") as HTMLStyleElement | null;
+    if (!tag) {
+      tag = document.createElement("style");
+      tag.id = "active-agency-theme";
+      document.head.appendChild(tag);
+    }
+    tag.innerHTML = css;
+  }, [branding?.accent]);
+
   async function returnToPrimaryOrg() {
     if (!primaryOrg) return;
     const res = await fetch("/api/tenants/switch", {
@@ -95,6 +108,10 @@ export function AppShell({
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
+      <style
+        id="app-shell-theme"
+        dangerouslySetInnerHTML={{ __html: accentCssVariables(branding.accent) }}
+      />
       {navOpen && (
         <button
           aria-label="Cerrar el menú"

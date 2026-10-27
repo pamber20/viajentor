@@ -14,6 +14,10 @@ const updateSchema = z.object({
   contactPhone: z.string().trim().max(40).optional().nullable(),
   notes: z.string().trim().max(1000).optional().nullable(),
   customDomain: z.string().trim().max(120).optional().nullable(),
+  accentColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
 });
 
 type Params = { params: Promise<{ id: string }> };

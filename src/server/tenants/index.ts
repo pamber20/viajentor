@@ -1,7 +1,12 @@
 import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
-import { DEFAULT_BRANDING, normalizeBranding } from "@/lib/branding";
+import {
+  DEFAULT_BRANDING,
+  extractBranding,
+  normalizeBranding,
+  type Branding,
+} from "@/lib/branding";
 import {
   DEFAULT_PLAN_SEATS,
   extractTenantConfig,
@@ -157,6 +162,7 @@ export type TenantSummary = {
   createdAt: string;
   isPrimary: boolean;
   tenant: TenantConfig;
+  branding: Branding;
   owner: {
     userId: string;
     name: string;
@@ -284,6 +290,7 @@ export async function listTenantsWithMetrics(): Promise<TenantSummary[]> {
       createdAt: org.createdAt.toISOString(),
       isPrimary: org.slug === "principal",
       tenant: extractTenantConfig(org.metadata),
+      branding: extractBranding(org.metadata),
       owner: ownerByOrg.get(org.id) ?? null,
       metrics: {
         members: membersMap.get(org.id) ?? 0,
@@ -307,6 +314,7 @@ export type UpdateTenantInput = {
   contactPhone?: string | null;
   notes?: string | null;
   customDomain?: string | null;
+  accentColor?: string;
 };
 
 export async function updateTenant(
@@ -349,7 +357,7 @@ export async function updateTenant(
 
   metaObj.tenant = nextTenant;
   const nextName = patch.name?.trim() || org.name;
-  if (patch.name?.trim()) {
+  if (patch.name?.trim() || patch.accentColor) {
     const currentBranding =
       typeof metaObj.branding === "object" && metaObj.branding !== null
         ? (metaObj.branding as Record<string, unknown>)
@@ -357,6 +365,7 @@ export async function updateTenant(
     metaObj.branding = normalizeBranding({
       ...currentBranding,
       name: nextName,
+      ...(patch.accentColor ? { accent: patch.accentColor } : {}),
     });
   }
 

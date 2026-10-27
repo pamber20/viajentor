@@ -2,6 +2,7 @@ import { readMediaFile } from "@/server/whatsapp/media";
 import { getBrandingContext } from "@/server/branding";
 import { DEFAULT_BRANDING } from "@/lib/branding";
 import { FAVICON_ASSET, generatedFaviconSvg } from "@/lib/favicon";
+import { getSessionOrNull } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +34,13 @@ function cabeceras(mime: string, cacheable: boolean): HeadersInit {
  * secreto.
  */
 export async function GET(req: Request) {
-  const cacheable = new URL(req.url).searchParams.has("v");
+  const url = new URL(req.url);
+  const cacheable = url.searchParams.has("v");
+  const orgParam = url.searchParams.get("org");
+  const session = orgParam ? null : await getSessionOrNull();
+  const targetOrgId = orgParam || session?.organizationId;
 
-  const ctx = await getBrandingContext().catch(() => null);
+  const ctx = await getBrandingContext(targetOrgId).catch(() => null);
   const branding = ctx?.branding ?? DEFAULT_BRANDING;
 
   if (ctx?.organizationId && branding.favicon) {

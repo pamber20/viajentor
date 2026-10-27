@@ -65,6 +65,7 @@ export default function TenantsPage() {
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editAccentColor, setEditAccentColor] = useState("#0d5bff");
   const [savingEdit, setSavingEdit] = useState(false);
 
   const loadTenants = useCallback(async () => {
@@ -181,6 +182,7 @@ export default function TenantsPage() {
     setEditPhone(t.tenant.contactPhone ?? "");
     setEditEmail(t.tenant.contactEmail ?? t.owner?.email ?? "");
     setEditNotes(t.tenant.notes ?? "");
+    setEditAccentColor(t.branding?.accent ?? "#0d5bff");
   }
 
   async function handleSaveEdit(e: React.FormEvent) {
@@ -198,6 +200,7 @@ export default function TenantsPage() {
           contactPhone: editPhone || null,
           contactEmail: editEmail || "",
           notes: editNotes || null,
+          accentColor: editAccentColor,
         }),
       });
       if (res.ok) {
@@ -431,6 +434,11 @@ export default function TenantsPage() {
                         className="sticky inset-inline-start-0 border-b bg-card px-4 py-3 font-semibold text-foreground"
                       >
                         <div className="flex items-center gap-2">
+                          <span
+                            className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border border-black/15 shadow-2xs"
+                            style={{ backgroundColor: t.branding?.accent ?? "#0d5bff" }}
+                            title={`Color propio de marca: ${t.branding?.accent ?? "#0d5bff"}`}
+                          />
                           <span>{t.name}</span>
                           {t.isPrimary && (
                             <span className="rounded bg-brand-soft px-1.5 py-0.5 text-[10px] font-bold uppercase text-brand-text">
@@ -808,6 +816,24 @@ export default function TenantsPage() {
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="editAccentColor">Color propio de la agencia</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="editAccentColor"
+                    type="color"
+                    value={editAccentColor}
+                    onChange={(e) => setEditAccentColor(e.target.value)}
+                    className="h-9 w-12 cursor-pointer rounded border bg-background p-1"
+                  />
+                  <Input
+                    value={editAccentColor}
+                    onChange={(e) => setEditAccentColor(e.target.value)}
+                    className="font-mono"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 border-t pt-3">

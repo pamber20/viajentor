@@ -322,3 +322,17 @@ export function normalizeBranding(input: Partial<Branding> | null): Branding {
     : undefined;
   return { name, accent, currency, favicon, agency };
 }
+
+/** Extrae y normaliza el branding a partir del JSON de metadata de la organización */
+export function extractBranding(metadata: string | null | undefined): Branding {
+  if (!metadata) return { ...DEFAULT_BRANDING };
+  try {
+    const parsed = JSON.parse(metadata) as unknown;
+    if (typeof parsed === "object" && parsed !== null && "branding" in parsed) {
+      return normalizeBranding((parsed as { branding: Partial<Branding> }).branding);
+    }
+    return { ...DEFAULT_BRANDING };
+  } catch {
+    return { ...DEFAULT_BRANDING };
+  }
+}

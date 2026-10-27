@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth/session";
 import { normalizeThemePreference, THEME_COOKIE } from "@/lib/theme";
 import { getBranding } from "@/server/branding";
+import { accentCssVariables } from "@/lib/branding";
 import { AppShell } from "@/components/app-shell";
 import { resolveCommit } from "@/lib/version";
 import { agendaEnabled } from "@/server/agenda/flag";
@@ -73,22 +74,28 @@ export default async function AppLayout({
   );
 
   return (
-    <AppShell
-      branding={branding}
-      userName={authSession?.user.name ?? "Usuario"}
-      role={session.role}
-      superAdmin={Boolean(session.isSuperAdmin)}
-      impersonating={Boolean(session.impersonating)}
-      activeOrganizationId={session.organizationId}
-      activeOrganizationName={session.organizationName ?? branding.name}
-      accessibleOrganizations={accessibleOrganizations}
-      theme={theme}
-      commit={resolveCommit()}
-      agenda={agendaEnabled()}
-      kicker={navKicker([...enabledChannels()])}
-      aviso={<AvisoIaBanner aviso={aviso} />}
-    >
-      {children}
-    </AppShell>
+    <>
+      <style
+        id="app-theme-vars"
+        dangerouslySetInnerHTML={{ __html: accentCssVariables(branding.accent) }}
+      />
+      <AppShell
+        branding={branding}
+        userName={authSession?.user.name ?? "Usuario"}
+        role={session.role}
+        superAdmin={Boolean(session.isSuperAdmin)}
+        impersonating={Boolean(session.impersonating)}
+        activeOrganizationId={session.organizationId}
+        activeOrganizationName={session.organizationName ?? branding.name}
+        accessibleOrganizations={accessibleOrganizations}
+        theme={theme}
+        commit={resolveCommit()}
+        agenda={agendaEnabled()}
+        kicker={navKicker([...enabledChannels()])}
+        aviso={<AvisoIaBanner aviso={aviso} />}
+      >
+        {children}
+      </AppShell>
+    </>
   );
 }
