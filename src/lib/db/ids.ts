@@ -40,6 +40,7 @@ const prefixes = {
   travelQuote: "qt",
   travelPayment: "pay",
   travelVoucher: "vch",
+  travelPackage: "pkg",
 } as const;
 
 export type IdKind = keyof typeof prefixes;

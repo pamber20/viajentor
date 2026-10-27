@@ -1421,6 +1421,58 @@ export const travelQuote = pgTable(
   ]
 );
 
+/** Paquetes turísticos prediligenciados (plantillas maestras sin datos de cliente). */
+export const travelPackage = pgTable(
+  "travel_package",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    destination: text("destination").notNull(),
+    originCity: text("origin_city"),
+    departureAirport: text("departure_airport"),
+    arrivalAirport: text("arrival_airport"),
+    flightType: text("flight_type", {
+      enum: ["round-trip", "one-way"],
+    }).default("round-trip"),
+    startDate: text("start_date").notNull(),
+    endDate: text("end_date").notNull(),
+    nights: integer("nights").default(0),
+    passengers: integer("passengers").notNull().default(2),
+    childPassengers: integer("child_passengers").default(0),
+    currency: text("currency").notNull().default("COP"),
+    exchangeRate: integer("exchange_rate").default(1),
+    markupPercentage: integer("markup_percentage").default(15),
+    taxes: integer("taxes").default(0),
+    agencyCommission: integer("agency_commission").default(0),
+    minimumDeposit: integer("minimum_deposit").default(0),
+    administrativeFee: integer("administrative_fee").default(0),
+    medicalAssistance: integer("medical_assistance").default(0),
+    profitability: integer("profitability").default(75),
+    freelanceCommission: integer("freelance_commission").default(10),
+    selectedHotelId: text("selected_hotel_id"),
+    days: jsonb("days").notNull(),
+    inclusions: text("inclusions"),
+    exclusions: text("exclusions"),
+    policies: text("policies"),
+    status: text("status", {
+      enum: ["active", "draft", "archived"],
+    })
+      .notNull()
+      .default("active"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("travel_package_org_created_idx").on(t.organizationId, t.createdAt),
+    index("travel_package_org_status_idx").on(t.organizationId, t.status),
+    index("travel_package_org_destination_idx").on(t.organizationId, t.destination),
+  ]
+);
+
 /** Abonos de clientes a una cotización/reserva. */
 export const travelPayment = pgTable(
   "travel_payment",

@@ -4,15 +4,55 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Copy,
   Info,
+  Loader2,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+type FacebookLoginResponse = {
+  authResponse?: {
+    code?: string;
+    accessToken?: string;
+    userID?: string;
+  };
+  status?: string;
+};
+
+type FacebookSdk = {
+  init: (opts: { appId: string; cookie?: boolean; xfbml?: boolean; version: string }) => void;
+  login: (
+    callback: (response: FacebookLoginResponse) => void,
+    opts?: {
+      config_id?: string;
+      response_type?: string;
+      override_default_response_type?: boolean;
+      extras?: Record<string, unknown>;
+    }
+  ) => void;
+  _initialized?: boolean;
+};
+
+declare global {
+  interface Window {
+    FB?: FacebookSdk;
+    fbAsyncInit?: () => void;
+  }
+}
+
+type EmbeddedConfig = {
+  enabled: boolean;
+  appId: string | null;
+  configId: string | null;
+};
 
 type Connection = {
   wabaId: string;
@@ -46,18 +86,21 @@ type LastRegistration = { result: WebhookRegistration; from: "save" | "button" }
 export function WhatsappWizard() {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [webhook, setWebhook] = useState<WebhookInfo | null>(null);
+  const [embeddedConfig, setEmbeddedConfig] = useState<EmbeddedConfig | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [registration, setRegistration] = useState<LastRegistration | null>(
     null
   );
 
   const refetch = useCallback(async () => {
-    const [c, w] = await Promise.all([
+    const [c, w, emb] = await Promise.all([
       fetch("/api/settings/whatsapp").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/settings/webhook").then((r) => (r.ok ? r.json() : null)),
-    ]).catch(() => [null, null]);
+      fetch("/api/settings/whatsapp/embedded-signup").then((r) => (r.ok ? r.json() : null)),
+    ]).catch(() => [null, null, null]);
     if (c) setConnection(c.connection);
     if (w) setWebhook(w);
+    if (emb) setEmbeddedConfig(emb);
     setLoaded(true);
   }, []);
 
@@ -116,6 +159,7 @@ export function WhatsappWizard() {
 
       <ConnectForm
         existing={connection}
+        embeddedConfig={embeddedConfig}
         registration={registration?.from === "save" ? registration.result : null}
         onRegistration={(result) =>
           setRegistration(result ? { result, from: "save" } : null)
@@ -207,13 +251,46 @@ function Desconectar({ onHecho }: { onHecho: () => void }) {
   );
 }
 
+function loadFacebookSdk(appId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined") return resolve();
+    if (window.FB) {
+      resolve();
+      return;
+    }
+    window.fbAsyncInit = function () {
+      window.FB?.init({
+        appId,
+        cookie: true,
+        xfbml: true,
+        version: "v21.0",
+      });
+      resolve();
+    };
+    const existing = document.getElementById("facebook-jssdk");
+    if (existing) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "facebook-jssdk";
+    script.src = "https://connect.facebook.net/es_LA/sdk.js";
+    script.async = true;
+    script.defer = true;
+    script.onerror = () => reject(new Error("No se pudo cargar el SDK de Facebook"));
+    document.body.appendChild(script);
+  });
+}
+
 function ConnectForm({
   existing,
+  embeddedConfig,
   registration,
   onRegistration,
   onSaved,
 }: {
   existing: Connection | null;
+  embeddedConfig?: EmbeddedConfig | null;
   registration: WebhookRegistration | null;
   onRegistration: (result: WebhookRegistration | null) => void;
   onSaved: () => void;
@@ -231,6 +308,97 @@ function ConnectForm({
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [connectingEmbedded, setConnectingEmbedded] = useState(false);
+  const [embeddedError, setEmbeddedError] = useState<string | null>(null);
+  const [showManual, setShowManual] = useState(!embeddedConfig?.enabled);
+
+  async function startEmbeddedSignup() {
+    if (!embeddedConfig?.appId) return;
+    setConnectingEmbedded(true);
+    setEmbeddedError(null);
+    try {
+      await loadFacebookSdk(embeddedConfig.appId);
+
+      let sessionData: { waba_id?: string; phone_number_id?: string } = {};
+
+      const messageHandler = (event: MessageEvent) => {
+        if (
+          event.origin !== "https://www.facebook.com" &&
+          event.origin !== "https://web.facebook.com"
+        ) {
+          return;
+        }
+        try {
+          const raw = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+          if (raw.type === "WA_EMBEDDED_SIGNUP") {
+            if (raw.event === "FINISH" || raw.event === "CANCEL") {
+              sessionData = {
+                waba_id: raw.data?.waba_id,
+                phone_number_id: raw.data?.phone_number_id,
+              };
+            }
+          }
+        } catch {}
+      };
+
+      window.addEventListener("message", messageHandler);
+
+      window.FB?.login(
+        async (response: FacebookLoginResponse) => {
+          window.removeEventListener("message", messageHandler);
+          const code = response?.authResponse?.code;
+          if (!code) {
+            setConnectingEmbedded(false);
+            if (response?.status !== "connected") {
+              setEmbeddedError("El flujo de conexión con Meta fue cancelado o no completado.");
+            }
+            return;
+          }
+
+          try {
+            const res = await fetch("/api/settings/whatsapp/embedded-signup", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                code,
+                wabaId: sessionData.waba_id,
+                phoneNumberId: sessionData.phone_number_id,
+              }),
+            });
+
+            const data = await res.json().catch(() => null);
+            if (!res.ok || !data?.ok) {
+              setEmbeddedError(
+                data?.error?.message ?? "Error al intercambiar credenciales con Meta"
+              );
+            } else {
+              onRegistration(data.webhook ?? null);
+              onSaved();
+            }
+          } catch {
+            setEmbeddedError("Error al contactar con el servidor.");
+          } finally {
+            setConnectingEmbedded(false);
+          }
+        },
+        {
+          config_id: embeddedConfig.configId || undefined,
+          response_type: "code",
+          override_default_response_type: true,
+          extras: {
+            setup: {},
+            featureType: "",
+            sessionInfoVersion: "2",
+          },
+        }
+      );
+    } catch (err: unknown) {
+      setConnectingEmbedded(false);
+      const msg = err instanceof Error ? err.message : "Error inicializando el SDK de Meta";
+      setEmbeddedError(msg);
+    }
+  }
 
   const canTest = wabaId.trim() && phoneNumberId.trim() && token.trim();
 
@@ -299,33 +467,100 @@ function ConnectForm({
           webhook se registra en Meta por ti.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 rounded-md border bg-background p-4 text-sm">
-          <p className="font-medium">¿De dónde sale el token?</p>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-md border p-3">
-              <p className="mb-1 font-medium text-primary">Modo directo</p>
-              <p className="text-muted-foreground">
-                El negocio tiene su propia app en{" "}
-                <span className="text-foreground">developers.facebook.com</span>:
-                usa un token de <span className="text-foreground">usuario del sistema</span>{" "}
-                (no expira) con permisos de WhatsApp. En este modo conviene
-                configurar también el App Secret para la firma del webhook.
-              </p>
+      <CardContent className="space-y-5">
+        {embeddedConfig?.enabled ? (
+          <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+              <div className="flex-1 space-y-1">
+                <p className="font-semibold text-foreground">
+                  Conexión oficial con 1 clic (Meta Tech Provider)
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Conecta tu WhatsApp Business con Meta Embedded Signup. Sin copiar tokens,
+                  sin WABA ID manual y con registro automático de Webhooks para tu número.
+                </p>
+              </div>
             </div>
-            <div className="rounded-md border p-3">
-              <p className="mb-1 font-medium text-primary">Modo agencia (Tech Provider)</p>
-              <p className="text-muted-foreground">
-                Tu agencia hace el Embedded Signup en SU plataforma y su
-                backend obtiene el token del cliente; te lo entrega para
-                pegarlo aquí. Al guardar, el webhook se registra en el número
-                (<span className="text-foreground">override del número</span>),
-                igual que en modo directo; si tu agencia ya enruta la cuenta a
-                su propio backend, se respeta.
-              </p>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <Button
+                type="button"
+                className="bg-[#1877F2] hover:bg-[#166FE5] text-white font-medium shadow"
+                disabled={connectingEmbedded}
+                onClick={() => void startEmbeddedSignup()}
+              >
+                {connectingEmbedded ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Conectando con Meta…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Iniciar con Facebook (WhatsApp)
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setShowManual((prev) => !prev)}
+              >
+                {showManual ? (
+                  <>
+                    <ChevronUp className="mr-1 h-3.5 w-3.5" />
+                    Ocultar configuración manual
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="mr-1 h-3.5 w-3.5" />
+                    O ingresar credenciales manualmente
+                  </>
+                )}
+              </Button>
             </div>
+            {embeddedError && (
+              <p role="alert" className="text-sm text-destructive font-medium">
+                {embeddedError}
+              </p>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+            💡 <strong>Meta Tech Provider:</strong> Configura <code>META_APP_ID</code> y <code>META_APP_SECRET</code> en el servidor para habilitar el botón oficial de conexión en 1 clic (Embedded Signup).
+          </div>
+        )}
+
+        {(showManual || !embeddedConfig?.enabled) && (
+          <div className="space-y-4 pt-2 border-t">
+            <div className="grid gap-3 rounded-md border bg-background p-4 text-sm">
+              <p className="font-medium">¿De dónde sale el token manual?</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-md border p-3">
+                  <p className="mb-1 font-medium text-primary">Modo directo</p>
+                  <p className="text-muted-foreground">
+                    El negocio tiene su propia app en{" "}
+                    <span className="text-foreground">developers.facebook.com</span>:
+                    usa un token de <span className="text-foreground">usuario del sistema</span>{" "}
+                    (no expira) con permisos de WhatsApp. En este modo conviene
+                    configurar también el App Secret para la firma del webhook.
+                  </p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="mb-1 font-medium text-primary">Modo agencia (Tech Provider)</p>
+                  <p className="text-muted-foreground">
+                    Tu agencia hace el Embedded Signup en SU plataforma y su
+                    backend obtiene el token del cliente; te lo entrega para
+                    pegarlo aquí. Al guardar, el webhook se registra en el número
+                    (<span className="text-foreground">override del número</span>),
+                    igual que en modo directo; si tu agencia ya enruta la cuenta a
+                    su propio backend, se respeta.
+                  </p>
+                </div>
+              </div>
+            </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
@@ -390,9 +625,11 @@ function ConnectForm({
             {saving ? "Guardando…" : "Guardar conexión"}
           </Button>
         </div>
-      </CardContent>
-    </Card>
-  );
+      </div>
+    )}
+  </CardContent>
+</Card>
+);
 }
 
 /**

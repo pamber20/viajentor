@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import {
   ArrowLeft,
   ArrowLeftRight,
+  BookmarkPlus,
   Car,
   Check,
   ChevronDown,
@@ -14,6 +15,7 @@ import {
   MapPin,
   Maximize2,
   Minimize2,
+  Package,
   Plane,
   Plus,
   Shield,
@@ -44,6 +46,8 @@ import type {
 import { SupplierCombobox } from "@/components/travel/suppliers/supplier-combobox";
 import { CITY_AIRPORT_MAP } from "@/hooks/useAirlines";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
+import type { TravelPackageDto } from "@/server/travel/packages";
+import { PackageSelectorModal } from "@/components/travel/packages/package-selector-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 
@@ -130,6 +134,7 @@ function mapItemTypeToSupplier(type: string): TravelSupplierType {
 
 export function QuoteBuilder({
   initialQuote,
+  initialPackageId,
   contactId,
   leadId,
   clientName: initialClientName,
@@ -139,6 +144,7 @@ export function QuoteBuilder({
   onSaved,
 }: {
   initialQuote?: TravelQuoteDto | null;
+  initialPackageId?: string | null;
   contactId?: string | null;
   leadId?: string | null;
   clientName?: string | null;
@@ -234,6 +240,104 @@ export function QuoteBuilder({
   const [confirmAiSuggestOpen, setConfirmAiSuggestOpen] = useState(false);
 
   const { toast } = useToast();
+
+  // Estados e integración con Paquetes Turísticos
+  const [packageSelectorOpen, setPackageSelectorOpen] = useState(false);
+  const [saveAsPackageOpen, setSaveAsPackageOpen] = useState(false);
+  const [packageTitle, setPackageTitle] = useState("");
+  const [packageDescription, setPackageDescription] = useState("");
+  const [savingAsPackage, setSavingAsPackage] = useState(false);
+
+  function applyPackage(pkg: TravelPackageDto) {
+    if (pkg.destination) setDestination(pkg.destination);
+    if (pkg.startDate) setStartDate(pkg.startDate);
+    if (pkg.endDate) setEndDate(pkg.endDate);
+    if (pkg.nights) setNights(pkg.nights);
+    if (pkg.passengers) setPassengers(pkg.passengers);
+    if (pkg.childPassengers !== undefined) setChildPassengers(pkg.childPassengers);
+    if (pkg.currency) setCurrency(pkg.currency);
+    if (pkg.exchangeRate) setExchangeRate(pkg.exchangeRate);
+    if (pkg.markupPercentage !== undefined) setMarkupPercentage(pkg.markupPercentage);
+    if (pkg.taxes !== undefined) setTaxes(pkg.taxes);
+    if (pkg.administrativeFee !== undefined) setAdministrativeFee(pkg.administrativeFee);
+    if (pkg.profitability !== undefined) setProfitability(pkg.profitability);
+    if (pkg.minimumDeposit !== undefined) setMinimumDeposit(pkg.minimumDeposit);
+    if (pkg.freelanceCommission !== undefined) setFreelanceCommission(pkg.freelanceCommission);
+    if (pkg.selectedHotelId) setSelectedHotelId(pkg.selectedHotelId);
+    if (pkg.days && pkg.days.length > 0) setDays(pkg.days);
+    if (pkg.inclusions) setInclusions(pkg.inclusions);
+    if (pkg.exclusions) setExclusions(pkg.exclusions);
+    if (pkg.policies) setPolicies(pkg.policies);
+    toast(`Paquete "${pkg.title}" cargado con éxito`, "success");
+  }
+
+  useEffect(() => {
+    if (!initialPackageId) return;
+    async function loadPackage() {
+      try {
+        const res = await fetch(`/api/travel/packages/${initialPackageId}`);
+        if (!res.ok) return;
+        const pkg = (await res.json()) as TravelPackageDto;
+        applyPackage(pkg);
+      } catch (err) {
+        console.error("Error al cargar paquete inicial", err);
+      }
+    }
+    void loadPackage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPackageId]);
+
+  async function handleSaveAsPackage() {
+    if (!destination.trim()) {
+      toast("El paquete debe tener al menos un destino", "warning");
+      return;
+    }
+    if (!packageTitle.trim()) {
+      toast("Ingresa un título para el paquete", "warning");
+      return;
+    }
+    try {
+      setSavingAsPackage(true);
+      const res = await fetch("/api/travel/packages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: packageTitle.trim(),
+          description: packageDescription.trim() || undefined,
+          destination: destination.trim(),
+          startDate: startDate || null,
+          endDate: endDate || null,
+          nights: Number(nights) || 0,
+          passengers: Number(passengers) || 1,
+          childPassengers: Number(childPassengers) || 0,
+          currency,
+          exchangeRate: Number(exchangeRate) || 1,
+          markupPercentage: Number(markupPercentage) || 15,
+          taxes: Number(taxes) || 0,
+          administrativeFee: Number(administrativeFee) || 0,
+          profitability: Number(profitability) || 75,
+          minimumDeposit: Number(minimumDeposit) || 0,
+          freelanceCommission: Number(freelanceCommission) || 0,
+          selectedHotelId: selectedHotelId || null,
+          days,
+          inclusions: inclusions.trim() || undefined,
+          exclusions: exclusions.trim() || undefined,
+          policies: policies.trim() || undefined,
+          status: "active",
+        }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error?.message || "Error al guardar el paquete");
+      }
+      toast(`Paquete "${packageTitle}" guardado exitosamente`, "success");
+      setSaveAsPackageOpen(false);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Error al guardar paquete", "error");
+    } finally {
+      setSavingAsPackage(false);
+    }
+  }
 
   const isFormDirty =
     Boolean(clientName.trim() && clientName !== (initialQuote?.clientName ?? initialClientName ?? "")) ||
@@ -1023,6 +1127,17 @@ export function QuoteBuilder({
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setPackageSelectorOpen(true)}
+              className="text-xs bg-card hover:bg-muted text-foreground border-border gap-1.5"
+              title="Cargar fechas, itinerario y servicios desde un Paquete Turístico"
+            >
+              <Package className="h-3.5 w-3.5 text-primary" />
+              Cargar Paquete
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -2561,16 +2676,131 @@ export function QuoteBuilder({
           </div>
 
           {/* Form Actions */}
-          <div className="flex items-center justify-end gap-2 pt-4 border-t">
-            <Button type="button" variant="ghost" onClick={requestClose} disabled={saving}>
-              Cancelar
+          <div className="flex items-center justify-between gap-2 pt-4 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setPackageTitle(
+                  destination ? `Paquete ${destination} (${nights} noches)` : "Nuevo Paquete Turístico"
+                );
+                setSaveAsPackageOpen(true);
+              }}
+              className="gap-1.5 text-xs text-text-2 border-border hover:bg-muted"
+              title="Guardar este itinerario como una plantilla de Paquete Turístico"
+            >
+              <BookmarkPlus className="h-4 w-4 text-primary" />
+              Guardar como Paquete
             </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear Cotización"}
-            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="ghost" onClick={requestClose} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear Cotización"}
+              </Button>
+            </div>
           </div>
         </form>
       </div>
+
+      {/* Selector de Paquetes Turísticos */}
+      <PackageSelectorModal
+        isOpen={packageSelectorOpen}
+        onClose={() => setPackageSelectorOpen(false)}
+        onSelect={(pkg) => {
+          applyPackage(pkg);
+          setPackageSelectorOpen(false);
+        }}
+      />
+
+      {/* Modal para Guardar como Paquete */}
+      {saveAsPackageOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-card rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <BookmarkPlus className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    Guardar como Paquete Turístico
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Guarda este itinerario y servicios para reutilizarlo en futuras cotizaciones.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSaveAsPackageOpen(false)}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">
+                  Título del Paquete *
+                </label>
+                <Input
+                  value={packageTitle}
+                  onChange={(e) => setPackageTitle(e.target.value)}
+                  placeholder="Ej: Cancún Todo Incluido 5D/4N"
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">
+                  Descripción (Opcional)
+                </label>
+                <Textarea
+                  rows={2}
+                  value={packageDescription}
+                  onChange={(e) => setPackageDescription(e.target.value)}
+                  placeholder="Detalles clave, público objetivo o notas de la temporada..."
+                />
+              </div>
+
+              <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1 border border-border/50">
+                <div className="font-medium text-foreground">
+                  Información que se guardará en la plantilla:
+                </div>
+                <div>• Destino: <b>{destination || "Sin especificar"}</b></div>
+                <div>• Fechas: <b>{startDate || "Sin fecha"} al {endDate || "Sin fecha"}</b> ({nights} noches)</div>
+                <div>• Itinerario: <b>{days.length} días configurados</b></div>
+                <div className="text-[11px] text-primary pt-1">
+                  * No se guardará ningún dato personal del cliente.
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setSaveAsPackageOpen(false)}
+                disabled={savingAsPackage}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveAsPackage}
+                disabled={savingAsPackage || !packageTitle.trim()}
+                className="gap-2"
+              >
+                {savingAsPackage ? "Guardando..." : "Guardar Paquete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Diálogo al salir con cambios sin guardar */}
       <ConfirmDialog

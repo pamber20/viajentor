@@ -41,6 +41,7 @@ describe("barra lateral agrupada", () => {
     ]);
     expect(labels(groups)[1]).toEqual([
       "Cotizaciones",
+      "Paquetes Turísticos",
       "Viajes",
       "Vouchers",
       "Abonos y Cartera",

@@ -7,6 +7,7 @@ import {
   Inbox,
   Kanban,
   ListChecks,
+  Package,
   Plane,
   Settings,
   ShieldCheck,
@@ -79,6 +80,7 @@ export function appNavGroups({
   if (travel) {
     viajes.push(
       { href: "/quotes", label: "Cotizaciones", icon: FileText },
+      { href: "/packages", label: "Paquetes Turísticos", icon: Package },
       { href: "/trips", label: "Viajes", icon: Plane },
       { href: "/vouchers", label: "Vouchers", icon: Ticket },
       { href: "/payments", label: "Abonos y Cartera", icon: Wallet },

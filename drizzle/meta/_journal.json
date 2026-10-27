@@ -169,6 +169,13 @@
       "when": 1792952217416,
       "tag": "0023_unknown_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793129061243,
+      "tag": "0024_jittery_ares",
+      "breakpoints": true
     }
   ]
 }

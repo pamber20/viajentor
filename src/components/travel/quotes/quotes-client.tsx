@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Calendar,
   CheckCircle2,
@@ -50,13 +51,17 @@ export function QuotesClient({
   contactId?: string;
   leadId?: string;
 }) {
+  const searchParams = useSearchParams();
+  const packageIdParam = searchParams?.get("packageId") ?? null;
+  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(packageIdParam);
+
   const [quotes, setQuotes] = useState<TravelQuoteDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
   // Modals state
-  const [builderOpen, setBuilderOpen] = useState(false);
+  const [builderOpen, setBuilderOpen] = useState(Boolean(packageIdParam));
   const [editingQuote, setEditingQuote] = useState<TravelQuoteDto | null>(null);
   const [previewingQuote, setPreviewingQuote] = useState<TravelQuoteDto | null>(null);
   const [convertingQuote, setConvertingQuote] = useState<TravelQuoteDto | null>(null);
@@ -64,6 +69,13 @@ export function QuotesClient({
   const [deleteQuoteId, setDeleteQuoteId] = useState<string | null>(null);
 
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (packageIdParam) {
+      setSelectedPackageId(packageIdParam);
+      setBuilderOpen(true);
+    }
+  }, [packageIdParam]);
 
   async function handleDownloadPdf(q: TravelQuoteDto) {
     try {
@@ -122,12 +134,14 @@ export function QuotesClient({
     return (
       <QuoteBuilder
         initialQuote={editingQuote}
+        initialPackageId={selectedPackageId}
         contactId={contactId}
         leadId={leadId}
         layoutMode="workspace"
         onClose={() => {
           setBuilderOpen(false);
           setEditingQuote(null);
+          setSelectedPackageId(null);
         }}
         onSaved={(saved) => {
           setQuotes((prev) => {
@@ -139,6 +153,7 @@ export function QuotesClient({
           });
           setBuilderOpen(false);
           setEditingQuote(null);
+          setSelectedPackageId(null);
           toast("Cotización guardada exitosamente", "success");
         }}
       />
