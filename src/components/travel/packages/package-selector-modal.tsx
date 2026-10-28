@@ -45,11 +45,12 @@ export function PackageSelectorModal({
     async function loadPackages() {
       try {
         setLoading(true);
-        const res = await fetch("/api/travel/packages");
+        const res = await fetch("/api/travel/packages", { cache: "no-store" });
         if (!res.ok) throw new Error("Error al obtener paquetes");
         const data = await res.json();
         if (isMounted) {
-          setPackages(data.items ?? []);
+          const list = (data.packages ?? data.items ?? []) as TravelPackageDto[];
+          setPackages(list);
         }
       } catch (err) {
         console.error(err);

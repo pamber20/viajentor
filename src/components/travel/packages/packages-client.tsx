@@ -53,10 +53,11 @@ export function PackagesClient() {
   const fetchPackages = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/travel/packages");
+      const res = await fetch("/api/travel/packages", { cache: "no-store" });
       if (!res.ok) throw new Error("Error al obtener paquetes turísticos");
       const data = await res.json();
-      setPackages(data.items ?? []);
+      const list = (data.packages ?? data.items ?? []) as TravelPackageDto[];
+      setPackages(list);
     } catch (err) {
       console.error(err);
       toast("No se pudieron cargar los paquetes turísticos", "error");
@@ -99,7 +100,8 @@ export function PackagesClient() {
         method: "POST",
       });
       if (!res.ok) throw new Error("Error al duplicar paquete");
-      const duplicated = (await res.json()) as TravelPackageDto;
+      const data = await res.json();
+      const duplicated = (data.package ?? data) as TravelPackageDto;
       setPackages((prev) => [duplicated, ...prev]);
       toast(`Paquete "${pkg.title}" duplicado exitosamente`, "success");
     } catch (err) {
@@ -142,9 +144,20 @@ export function PackagesClient() {
           setIsBuilderOpen(false);
           setEditingPackage(null);
         }}
-        onSaved={() => {
+        onSaved={(savedPkg) => {
           setIsBuilderOpen(false);
           setEditingPackage(null);
+          if (savedPkg) {
+            setPackages((prev) => {
+              const idx = prev.findIndex((p) => p.id === savedPkg.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = savedPkg;
+                return next;
+              }
+              return [savedPkg, ...prev];
+            });
+          }
           fetchPackages();
         }}
         onQuoteWithPackage={(pkg) => {

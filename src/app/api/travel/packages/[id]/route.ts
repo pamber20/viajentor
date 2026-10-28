@@ -50,7 +50,10 @@ export const GET = withAuth(async (session, _req: Request, ctx: RouteContext) =>
   if (!pkg) {
     return apiError(404, "not_found", "Paquete turístico no encontrado");
   }
-  return Response.json({ package: pkg });
+  return Response.json(
+    { package: pkg, ...pkg },
+    { headers: { "Cache-Control": "no-store, max-age=0" } }
+  );
 });
 
 export const PATCH = withAuth(async (session, req: Request, ctx: RouteContext) => {

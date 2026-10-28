@@ -44,7 +44,10 @@ export const GET = withAuth(async (session, req: Request) => {
   const status = url.searchParams.get("status") ?? undefined;
 
   const packages = await listPackages(session.organizationId, { search, status });
-  return Response.json({ packages });
+  return Response.json(
+    { packages, items: packages },
+    { headers: { "Cache-Control": "no-store, max-age=0" } }
+  );
 });
 
 export const POST = withAuth(async (session, req: Request) => {

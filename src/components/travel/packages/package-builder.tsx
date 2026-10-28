@@ -824,7 +824,6 @@ export function PackageBuilder({
         "success"
       );
       onSaved(savedPackage);
-      onClose();
     } catch (err) {
       console.error(err);
       toast(err instanceof Error ? err.message : "Error al guardar paquete", "error");

@@ -12,7 +12,7 @@ export const POST = withAuth(async (session, _req: Request, ctx: RouteContext) =
     if (!duplicated) {
       return apiError(404, "not_found", "Paquete turístico no encontrado para duplicar");
     }
-    return Response.json({ package: duplicated }, { status: 201 });
+    return Response.json({ package: duplicated, ...duplicated }, { status: 201 });
   } catch (err) {
     console.error("[packages] error al duplicar paquete:", err);
     return apiError(

@@ -280,10 +280,13 @@ export function QuoteBuilder({
     if (!initialPackageId) return;
     async function loadPackage() {
       try {
-        const res = await fetch(`/api/travel/packages/${initialPackageId}`);
+        const res = await fetch(`/api/travel/packages/${initialPackageId}`, { cache: "no-store" });
         if (!res.ok) return;
-        const pkg = (await res.json()) as TravelPackageDto;
-        applyPackage(pkg);
+        const data = await res.json();
+        const pkg = (data.package ?? data) as TravelPackageDto;
+        if (pkg && (pkg.destination || pkg.title)) {
+          applyPackage(pkg);
+        }
       } catch (err) {
         console.error("Error al cargar paquete inicial", err);
       }
