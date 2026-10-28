@@ -176,6 +176,13 @@
       "when": 1793129061243,
       "tag": "0024_jittery_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793157705442,
+      "tag": "0025_tough_stepford_cuckoos",
+      "breakpoints": true
     }
   ]
 }

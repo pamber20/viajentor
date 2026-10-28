@@ -1,0 +1,1 @@
+ALTER TABLE "travel_package" ADD COLUMN "amortization_schedule" jsonb;

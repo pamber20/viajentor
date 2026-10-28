@@ -1,4 +1,5 @@
 import type { schema } from "@/lib/db";
+import type { TravelPackageDto } from "@/server/travel/packages";
 
 type AgentProfile = typeof schema.agentProfile.$inferSelect;
 type KbEntry = typeof schema.kbEntry.$inferSelect;
@@ -16,6 +17,79 @@ export function renderKb(entries: KbEntry[]): string {
     )
     .filter(Boolean)
     .join("\n\n");
+}
+
+export function renderPackagesCatalog(packages?: TravelPackageDto[]): string | null {
+  if (!packages || packages.length === 0) return null;
+
+  const catalogEntries = packages.map((pkg, idx) => {
+    const origin = pkg.originCity
+      ? `${pkg.originCity} (${pkg.departureAirport || "aeropuerto"})`
+      : "Ciudad base";
+    const dest = `${pkg.destination} (${pkg.arrivalAirport || "aeropuerto"})`;
+    const fechas = `${pkg.startDate} al ${pkg.endDate} (${pkg.nights} noches)`;
+    const deposito =
+      pkg.minimumDeposit > 0
+        ? `Separa con $${pkg.minimumDeposit.toLocaleString("es-CO")} ${pkg.currency} por persona (abono mes a mes)`
+        : "Abono según políticas de la agencia";
+
+    let hotelTarifas = "";
+    if (pkg.totals?.byHotel && pkg.totals.byHotel.length > 0) {
+      hotelTarifas = pkg.totals.byHotel
+        .map((h, i) => {
+          const adultUnit = Math.round(h.totalAdult / (pkg.passengers || 1));
+          const childUnit =
+            pkg.childPassengers > 0 && h.totalChild > 0
+              ? Math.round(h.totalChild / pkg.childPassengers)
+              : null;
+          let precioStr = `Adulto: $${adultUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
+          if (childUnit !== null) {
+            precioStr += ` | Niño: $${childUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
+          }
+          return `    • Opción #${i + 1} - ${h.hotelTitle}: ${precioStr}`;
+        })
+        .join("\n");
+    } else {
+      const adultUnit = Math.round(
+        (pkg.totals?.totalAdult ?? pkg.totals?.finalTotal ?? 0) / (pkg.passengers || 1)
+      );
+      const childUnit =
+        pkg.childPassengers > 0 && (pkg.totals?.totalChild ?? 0) > 0
+          ? Math.round(pkg.totals.totalChild / pkg.childPassengers)
+          : null;
+      let precioStr = `Adulto: $${adultUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
+      if (childUnit !== null) {
+        precioStr += ` | Niño: $${childUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
+      }
+      hotelTarifas = `    • Tarifa Base: ${precioStr}`;
+    }
+
+    const inc = pkg.inclusions ? `  - Inclusiones: ${pkg.inclusions.replace(/\n+/g, " · ")}` : null;
+    const pol = pkg.policies ? `  - Políticas: ${pkg.policies.replace(/\n+/g, " ")}` : null;
+
+    return [
+      `[PAQUETE #${idx + 1}: "${pkg.title}"]`,
+      `  - Trayecto: ${origin} ➔ ${dest}`,
+      `  - Fechas: ${fechas}`,
+      `  - Opciones de Hotel y Tarifas Unitarias:`,
+      hotelTarifas,
+      `  - Reserva: ${deposito}`,
+      inc,
+      pol,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  });
+
+  return [
+    "CATÁLOGO DE PAQUETES TURÍSTICOS VIGENTES (Fuente para cotizaciones y promociones de viaje):",
+    ...catalogEntries,
+    "Instrucciones para cotizar paquetes a los clientes:",
+    "- Cuando pregunten por destinos o paquetes, responde amablemente con las fechas, trayecto, inclusiones y las opciones de hotel disponibles.",
+    "- Si el cliente indica cuántos adultos y niños viajan, calcula y entrégale el valor total por cada hotel: (Adultos × Tarifa Adulto) + (Niños × Tarifa Niño).",
+    "- Menciona siempre el valor para separar por persona y la facilidad de abonar mes a mes.",
+    "- Anima al cliente a elegir una opción para apartar su cupo y solicitar sus datos de contacto.",
+  ].join("\n\n");
 }
 
 /**
@@ -40,9 +114,11 @@ export function buildAgentSystemPrompt(input: {
    * token en hablar de horarios: la agenda no existe aquí.
    */
   agenda?: boolean;
+  packages?: TravelPackageDto[];
 }): string {
   const { profile } = input;
   const stageNames = input.stages.map((s) => s.name).join(" | ");
+  const packagesBlock = renderPackagesCatalog(input.packages);
   const agendaLines = input.agenda
     ? [
         '- {"action":"offer_slots","reply":"..."} — ofrecer horarios para agendar (reply es solo la frase de entrada; los horarios los pone el sistema).',
@@ -65,6 +141,7 @@ export function buildAgentSystemPrompt(input: {
       : null,
     profile.greeting ? `Saludo sugerido para conversaciones nuevas: ${profile.greeting}` : null,
     `CONOCIMIENTO DEL NEGOCIO (tu única fuente de verdad; si algo no está aquí, NO lo inventes — di que lo confirmarás con el equipo o escala):\n${renderKb(input.kb)}`,
+    packagesBlock,
     `Etapas del pipeline disponibles: ${stageNames}`,
     [
       "En cada turno respondes ÚNICAMENTE un objeto JSON con UNA acción:",

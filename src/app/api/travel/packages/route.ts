@@ -31,6 +31,7 @@ const createPackageSchema = z.object({
   freelanceCommission: z.number().min(0).default(10),
   selectedHotelId: z.string().optional().nullable(),
   days: z.array(z.any()).min(1, "Debe tener al menos un día de itinerario") as z.ZodType<TravelDay[]>,
+  amortizationSchedule: z.array(z.any()).optional().nullable(),
   inclusions: z.string().optional().nullable(),
   exclusions: z.string().optional().nullable(),
   policies: z.string().optional().nullable(),

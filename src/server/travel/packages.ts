@@ -7,6 +7,7 @@ import { calculateDetailedQuoteTotals } from "@/lib/travel/pricing";
 import type {
   TravelCurrency,
   TravelDay,
+  TravelInstallment,
 } from "@/lib/travel/types";
 
 export type PackageStatus = "active" | "draft" | "archived";
@@ -40,6 +41,7 @@ export interface TravelPackageDto {
   freelanceCommission: number;
   selectedHotelId: string | null;
   days: TravelDay[];
+  amortizationSchedule: TravelInstallment[];
   inclusions: string | null;
   exclusions: string | null;
   policies: string | null;
@@ -116,6 +118,7 @@ export function serializePackage(row: PackageRow): TravelPackageDto {
     freelanceCommission,
     selectedHotelId: row.selectedHotelId,
     days,
+    amortizationSchedule: (row.amortizationSchedule ?? []) as TravelInstallment[],
     inclusions: row.inclusions,
     exclusions: row.exclusions,
     policies: row.policies,
@@ -159,6 +162,7 @@ export type CreatePackageInput = {
   freelanceCommission?: number;
   selectedHotelId?: string | null;
   days: TravelDay[];
+  amortizationSchedule?: TravelInstallment[] | null;
   inclusions?: string | null;
   exclusions?: string | null;
   policies?: string | null;
@@ -200,6 +204,7 @@ export async function createPackage(
       freelanceCommission: input.freelanceCommission ?? 10,
       selectedHotelId: input.selectedHotelId ?? null,
       days: input.days ?? [],
+      amortizationSchedule: input.amortizationSchedule ?? [],
       inclusions: input.inclusions ?? null,
       exclusions: input.exclusions ?? null,
       policies: input.policies ?? null,
@@ -305,6 +310,7 @@ export async function updatePackage(
       ...(patch.freelanceCommission !== undefined ? { freelanceCommission: patch.freelanceCommission } : {}),
       ...(patch.selectedHotelId !== undefined ? { selectedHotelId: patch.selectedHotelId } : {}),
       ...(patch.days !== undefined ? { days: patch.days } : {}),
+      ...(patch.amortizationSchedule !== undefined ? { amortizationSchedule: patch.amortizationSchedule ?? [] } : {}),
       ...(patch.inclusions !== undefined ? { inclusions: patch.inclusions } : {}),
       ...(patch.exclusions !== undefined ? { exclusions: patch.exclusions } : {}),
       ...(patch.policies !== undefined ? { policies: patch.policies } : {}),
@@ -375,6 +381,7 @@ export async function duplicatePackage(
     freelanceCommission: original.freelanceCommission,
     selectedHotelId: original.selectedHotelId,
     days: original.days,
+    amortizationSchedule: original.amortizationSchedule,
     inclusions: original.inclusions,
     exclusions: original.exclusions,
     policies: original.policies,

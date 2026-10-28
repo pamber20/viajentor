@@ -30,6 +30,7 @@ import {
 import { agendaEnabled } from "@/server/agenda/flag";
 import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
+import { listPackages } from "@/server/travel/packages";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -248,6 +249,7 @@ export async function runAgentTurn(
     .orderBy(asc(schema.pipelineStage.position));
 
   const agenda = agendaEnabled();
+  const activePackages = await listPackages(organizationId, { status: "active" }).catch(() => []);
 
   /**
    * 015 — Los huecos vigentes, con su instante exacto.
@@ -275,7 +277,7 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildAgentSystemPrompt({ profile, kb, stages, agenda }),
+      content: buildAgentSystemPrompt({ profile, kb, stages, agenda, packages: activePackages }),
     },
     ...history
       .filter((m) => m.text)

@@ -104,7 +104,7 @@ const PREFERENCES = [
   { id: "baggage", label: "Equipaje" },
 ];
 
-const DESTINATION_TEMPLATES = [
+export const DESTINATION_TEMPLATES = [
   { name: "Cancún", country: "México" },
   { name: "Cartagena", country: "Colombia" },
   { name: "Punta Cana", country: "Rep. Dominicana" },
@@ -115,7 +115,7 @@ const DESTINATION_TEMPLATES = [
   { name: "Santa Marta", country: "Colombia" },
 ];
 
-function mapItemTypeToSupplier(type: string): TravelSupplierType {
+export function mapItemTypeToSupplier(type: string): TravelSupplierType {
   switch (type) {
     case "Flight":
       return "airline";
@@ -269,6 +269,7 @@ export function QuoteBuilder({
     if (pkg.freelanceCommission !== undefined) setFreelanceCommission(pkg.freelanceCommission);
     if (pkg.selectedHotelId) setSelectedHotelId(pkg.selectedHotelId);
     if (pkg.days && pkg.days.length > 0) setDays(pkg.days);
+    if (pkg.amortizationSchedule && pkg.amortizationSchedule.length > 0) setAmortizationSchedule(pkg.amortizationSchedule);
     if (pkg.inclusions) setInclusions(pkg.inclusions);
     if (pkg.exclusions) setExclusions(pkg.exclusions);
     if (pkg.policies) setPolicies(pkg.policies);
@@ -328,6 +329,7 @@ export function QuoteBuilder({
           freelanceCommission: Number(freelanceCommission) || 0,
           selectedHotelId: selectedHotelId || null,
           days,
+          amortizationSchedule: amortizationSchedule || [],
           inclusions: inclusions.trim() || undefined,
           exclusions: exclusions.trim() || undefined,
           policies: policies.trim() || undefined,

@@ -1455,6 +1455,9 @@ export const travelPackage = pgTable(
     freelanceCommission: integer("freelance_commission").default(10),
     selectedHotelId: text("selected_hotel_id"),
     days: jsonb("days").notNull(),
+    amortizationSchedule: jsonb("amortization_schedule").$type<
+      { id: string; code?: string; dueDate: string; amount: number; status: "pending" | "paid" | "partial" }[]
+    >(),
     inclusions: text("inclusions"),
     exclusions: text("exclusions"),
     policies: text("policies"),

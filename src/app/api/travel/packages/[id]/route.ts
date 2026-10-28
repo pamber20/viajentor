@@ -37,6 +37,7 @@ const updatePackageSchema = z.object({
   freelanceCommission: z.number().min(0).optional(),
   selectedHotelId: z.string().optional().nullable(),
   days: z.array(z.any()).optional() as z.ZodType<TravelDay[] | undefined>,
+  amortizationSchedule: z.array(z.any()).optional().nullable(),
   inclusions: z.string().optional().nullable(),
   exclusions: z.string().optional().nullable(),
   policies: z.string().optional().nullable(),
