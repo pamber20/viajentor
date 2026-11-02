@@ -44,6 +44,7 @@ import type {
 import type { TravelQuoteDto } from "@/server/travel/quotes";
 import type { TravelPaymentDto, TravelVoucherDto } from "@/server/travel/trips";
 import { PaymentModal } from "./payment-modal";
+import { AutoPlanModal, ManualInstallmentModal } from "./installment-modals";
 import {
   downloadQuotePdf,
   downloadReceiptPdf,
@@ -129,17 +130,7 @@ export function TripDrawer({
 
   // Manual & Auto Installments Modal
   const [autoPlanOpen, setAutoPlanOpen] = useState(false);
-  const [autoPlanCount, setAutoPlanCount] = useState<number>(3);
-  const [autoPlanFrequency, setAutoPlanFrequency] = useState<"weekly" | "fortnightly" | "monthly">("monthly");
-  const [autoPlanFirstDate, setAutoPlanFirstDate] = useState<string>(
-    new Date().toISOString().split("T")[0]!
-  );
-
   const [manualInstallmentOpen, setManualInstallmentOpen] = useState(false);
-  const [manualInstallmentAmount, setManualInstallmentAmount] = useState<number | "">("");
-  const [manualInstallmentDueDate, setManualInstallmentDueDate] = useState<string>(
-    new Date().toISOString().split("T")[0]!
-  );
 
   // Supplier Payment Modal
   const [supplierPayModalOpen, setSupplierPayModalOpen] = useState(false);
@@ -213,6 +204,12 @@ export function TripDrawer({
     quote.totals.finalTotal > 0
       ? Math.min(100, Math.round((totalPaid / quote.totals.finalTotal) * 100))
       : 0;
+
+  const hasExistingPayments =
+    payments.length > 0 ||
+    (quote.amortizationSchedule || []).some(
+      (inst) => inst.status === "paid" || inst.status === "partial"
+    );
 
   const scheduledTotal = (quote.amortizationSchedule || []).reduce(
     (sum, inst) => sum + inst.amount,
@@ -331,8 +328,16 @@ export function TripDrawer({
   }
 
   /* Automatic Payment Plan Generation */
-  async function handleCreateAutoPlan() {
-    if (autoPlanCount <= 0) return;
+  async function handleCreateAutoPlan(
+    count: number,
+    freq: "weekly" | "fortnightly" | "monthly",
+    fDate: string
+  ) {
+    if (hasExistingPayments) {
+      toast("No se puede generar el plan automático porque ya existen abonos registrados.", "warning");
+      return;
+    }
+    if (count <= 0) return;
 
     // Preserve installments already paid or partial
     const kept = (quote.amortizationSchedule || []).filter(
@@ -347,25 +352,25 @@ export function TripDrawer({
     }
 
     let intervalDays = 30;
-    if (autoPlanFrequency === "weekly") intervalDays = 7;
-    else if (autoPlanFrequency === "fortnightly") intervalDays = 15;
+    if (freq === "weekly") intervalDays = 7;
+    else if (freq === "fortnightly") intervalDays = 15;
 
-    const baseAmount = Math.floor(balanceToSchedule / autoPlanCount);
-    const firstDate = new Date(autoPlanFirstDate);
+    const baseAmount = Math.floor(balanceToSchedule / count);
+    const firstDate = new Date(fDate);
 
     const newInsts: TravelInstallment[] = [];
     let accumulated = 0;
 
-    for (let i = 0; i < autoPlanCount; i++) {
+    for (let i = 0; i < count; i++) {
       const d = new Date(firstDate);
       d.setDate(d.getDate() + i * intervalDays);
-      const isLast = i === autoPlanCount - 1;
+      const isLast = i === count - 1;
       const amount = isLast ? balanceToSchedule - accumulated : baseAmount;
       accumulated += amount;
 
       newInsts.push({
         id: Math.random().toString(36).slice(2, 9),
-        code: `Cuota ${kept.length + i + 1}/${kept.length + autoPlanCount}`,
+        code: `Cuota ${kept.length + i + 1}/${kept.length + count}`,
         dueDate: d.toISOString().split("T")[0]!,
         amount,
         status: "pending",
@@ -393,11 +398,9 @@ export function TripDrawer({
   }
 
   /* Add Manual Installment */
-  async function handleAddManualInstallment(e: React.FormEvent) {
-    e.preventDefault();
-    if (!manualInstallmentAmount || Number(manualInstallmentAmount) <= 0) return;
+  async function handleAddManualInstallment(amount: number, dueDate: string) {
+    if (!amount || amount <= 0) return;
 
-    const amount = Number(manualInstallmentAmount);
     const currentTotal = (quote.amortizationSchedule || []).reduce(
       (sum, i) => sum + i.amount,
       0
@@ -417,7 +420,7 @@ export function TripDrawer({
     const newInst: TravelInstallment = {
       id: Math.random().toString(36).slice(2, 9),
       code: `Cuota ${(quote.amortizationSchedule || []).length + 1}`,
-      dueDate: manualInstallmentDueDate,
+      dueDate,
       amount,
       status: "pending",
     };
@@ -434,7 +437,6 @@ export function TripDrawer({
         const data = await res.json();
         onUpdated(data.quote);
         setManualInstallmentOpen(false);
-        setManualInstallmentAmount("");
         toast("Cuota añadida con éxito", "success");
       }
     } catch (err) {
@@ -813,346 +815,357 @@ export function TripDrawer({
         }
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Drawer Header */}
-        <header className="flex flex-col gap-3 border-b bg-muted/20 p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              {layoutMode === "workspace" && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={onClose}
-                    className="gap-1.5 text-xs font-semibold text-text-2 hover:bg-muted"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    <span>Volver</span>
-                  </Button>
-                  <div className="h-6 w-px bg-border hidden sm:block" />
-                </>
-              )}
-              <div className="w-10 h-10 rounded-xl bg-brand-soft flex items-center justify-center text-brand-text">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm font-extrabold text-brand">
-                    {quote.bookingNumber ?? quote.quoteNumber}
-                  </span>
-                  <Badge variant="outline" className="text-xs">
-                    Expediente Confirmado
-                  </Badge>
-                </div>
-                <h2 className="text-lg font-bold text-foreground">
-                  {quote.clientName}
-                </h2>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {onEditQuote && (
+        {/* Header Superior Fijo y Compacto */}
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-card px-4 py-3 sm:px-5 sm:py-3.5 shrink-0 z-30">
+          <div className="flex items-center gap-3">
+            {layoutMode === "workspace" && (
+              <>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => onEditQuote(quote)}
-                  className="h-8 px-2.5 text-xs text-text-2 border-border hover:bg-muted"
-                  title="Editar Itinerario de la Reserva"
-                >
-                  <Pencil className="mr-1.5 h-3.5 w-3.5 text-brand" />
-                  Editar Itinerario
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={downloadingBookingPdf}
-                onClick={() => void handleDownloadBookingPdf()}
-                className="h-8 px-2.5 text-xs text-brand border-brand/30 hover:bg-brand-soft disabled:opacity-60"
-                title="Descargar Itinerario y Reserva en PDF"
-              >
-                {downloadingBookingPdf ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                {downloadingBookingPdf ? "Generando..." : "PDF Reserva"}
-              </Button>
-              <select
-                value={bookingStatus}
-                onChange={(e) => void handleStatusChange(e.target.value as BookingStatus)}
-                className="h-8 rounded-md border border-input bg-card px-2.5 text-xs font-bold text-foreground"
-              >
-                {BOOKING_STATUSES.map((st) => (
-                  <option key={st.value} value={st.value}>
-                    {st.label}
-                  </option>
-                ))}
-              </select>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowOverview(!showOverview)}
-                className="h-8 px-2.5 text-xs text-text-2 border-border hover:bg-muted"
-                title={showOverview ? "Ocultar resumen del viaje" : "Ver resumen del viaje"}
-              >
-                {showOverview ? (
-                  <ChevronUp className="h-3.5 w-3.5 mr-1 text-brand" />
-                ) : (
-                  <ChevronDown className="h-3.5 w-3.5 mr-1 text-brand" />
-                )}
-                {showOverview ? "Ocultar Resumen" : "Ver Resumen"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setIsFullscreen(!isFullscreen)}
-                className="h-8 px-2.5 text-xs text-text-2 border-border hover:bg-muted"
-                title={isFullscreen ? "Restaurar tamaño lateral" : "Pantalla completa"}
-              >
-                {isFullscreen ? (
-                  <Minimize2 className="h-3.5 w-3.5 mr-1" />
-                ) : (
-                  <Maximize2 className="h-3.5 w-3.5 mr-1" />
-                )}
-                {isFullscreen ? "Restaurar" : "Pantalla Completa"}
-              </Button>
-              {layoutMode === "drawer" && (
-                <button
-                  type="button"
                   onClick={onClose}
-                  className="rounded-md p-1.5 text-text-3 hover:text-foreground"
+                  className="gap-1.5 text-xs font-semibold text-text-2 hover:bg-muted"
                 >
-                  <X className="h-5 w-5" />
-                </button>
-              )}
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Volver</span>
+                </Button>
+                <div className="h-6 w-px bg-border hidden sm:block" />
+              </>
+            )}
+            <div className="w-10 h-10 rounded-xl bg-brand-soft flex items-center justify-center text-brand-text">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm font-extrabold text-brand">
+                  {quote.bookingNumber ?? quote.quoteNumber}
+                </span>
+                <Badge variant="outline" className="text-xs">
+                  Expediente Confirmado
+                </Badge>
+              </div>
+              <h2 className="text-lg font-bold text-foreground">
+                {quote.clientName}
+              </h2>
             </div>
           </div>
 
-          {/* Barra compacta cuando la sección está colapsada */}
-          {!showOverview && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-2.5 px-3.5 text-xs shadow-2xs">
-              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-text-2">
-                <span className="font-bold text-foreground flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-brand shrink-0" />
-                  {quote.destination}
-                </span>
-                <span className="text-text-3 hidden sm:inline">•</span>
-                <span>
-                  <strong className="text-foreground">Salida:</strong> {quote.startDate || "N/A"} ({quote.nights} noches)
-                </span>
-                <span className="text-text-3 hidden sm:inline">•</span>
-                <span>
-                  <strong className="text-foreground">Pasajeros:</strong> {quote.passengers} adultos
-                  {quote.childPassengers > 0 ? ` + ${quote.childPassengers} niños` : ""}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3 sm:gap-5">
-                <div className="flex items-center gap-3">
-                  <span className="text-text-3">
-                    Inversión: <strong className="text-foreground font-extrabold">{formatCurrency(quote.totals.finalTotal, quote.currency)}</strong>
-                  </span>
-                  <span className="text-text-3">•</span>
-                  <span className="text-text-3">
-                    Saldo Pendiente: <strong className="text-amber-600 font-extrabold">{formatCurrency(balanceRemaining, quote.currency)}</strong>
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowOverview(true)}
-                  className="text-brand hover:underline font-semibold text-xs flex items-center gap-1"
-                >
-                  <span>Expandir</span>
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Bloque completo cuando la sección está expandida */}
-          {showOverview && (
-            <>
-              {/* Info bar with destination, dates and customer info */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-card p-3 rounded-xl border text-xs">
-                <div>
-                  <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
-                    Destino
-                  </span>
-                  <span className="font-semibold text-foreground flex items-center gap-1 mt-0.5 truncate">
-                    <MapPin className="h-3 w-3 text-brand shrink-0" />
-                    {quote.destination}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
-                    Salida y Noches
-                  </span>
-                  <span className="font-semibold text-foreground mt-0.5 block">
-                    {quote.startDate || "N/A"} ({quote.nights} noches)
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
-                    Contacto Principal
-                  </span>
-                  <span className="font-semibold text-foreground mt-0.5 block truncate">
-                    {quote.clientPhone || quote.clientEmail || "Sin datos"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
-                    Pasajeros
-                  </span>
-                  <span className="font-semibold text-foreground mt-0.5 block">
-                    {quote.passengers} adultos {quote.childPassengers > 0 ? `+ ${quote.childPassengers} niños` : ""}
-                  </span>
-                </div>
-              </div>
-
-              {/* Metrics summary cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-xl border bg-card p-3.5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
-                      Total del Viaje
-                    </span>
-                    <DollarSign className="h-4 w-4 text-emerald-500" />
-                  </div>
-                  <span className="text-xl font-extrabold text-foreground block">
-                    {formatCurrency(quote.totals.finalTotal, quote.currency)}
-                  </span>
-                  <span className="text-[11px] text-emerald-600 font-semibold block">
-                    Inversión confirmada
-                  </span>
-                </div>
-
-                <div className="rounded-xl border bg-card p-3.5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
-                      Saldo Pendiente
-                    </span>
-                    <AlertCircle className="h-4 w-4 text-amber-500" />
-                  </div>
-                  <span className="text-xl font-extrabold text-amber-600 block">
-                    {formatCurrency(balanceRemaining, quote.currency)}
-                  </span>
-                  <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden mt-1.5">
-                    <div
-                      className="bg-emerald-500 h-full transition-all"
-                      style={{ width: `${percentagePaid}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-xl border bg-card p-3.5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
-                      Por Programar
-                    </span>
-                    <Clock className="h-4 w-4 text-brand" />
-                  </div>
-                  <span className="text-xl font-extrabold text-foreground block">
-                    {formatCurrency(remainingToSchedule, quote.currency)}
-                  </span>
-                  <span className="text-[11px] text-text-3 font-semibold block">
-                    {(quote.amortizationSchedule || []).length} cuotas pactadas
-                  </span>
-                </div>
-              </div>
-
-              {/* Billing & Counter details (Colapsable para no tapar el contenido de las pestañas) */}
-              <div className="rounded-xl border bg-card p-2.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => setShowBillingHeader(!showBillingHeader)}
-                    className="text-xs font-bold text-text-2 hover:text-foreground flex items-center gap-1.5"
-                  >
-                    <span>Datos de Facturación & Counter</span>
-                    <span className="text-[10px] text-text-3 font-normal">
-                      {showBillingHeader ? "(Ocultar)" : "(Ver/Editar)"}
-                    </span>
-                  </button>
-                  {showBillingHeader && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-6 text-[11px]"
-                      onClick={handleSaveBilling}
-                      disabled={savingBilling}
-                    >
-                      {savingBilling ? "Guardando..." : "Guardar Facturación"}
-                    </Button>
-                  )}
-                </div>
-                {showBillingHeader && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t pt-2">
-                    <Input
-                      placeholder="A quién facturamos (Razón Social / Nombre)"
-                      value={billingName}
-                      onChange={(e) => setBillingName(e.target.value)}
-                      className="h-8 text-xs"
-                    />
-                    <Input
-                      placeholder="NIT / Documento Factura"
-                      value={billingId}
-                      onChange={(e) => setBillingId(e.target.value)}
-                      className="h-8 text-xs"
-                    />
-                    <Input
-                      placeholder="Counter Responsable"
-                      value={counterName}
-                      onChange={(e) => setCounterName(e.target.value)}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+          <div className="flex items-center gap-2">
+            {onEditQuote && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onEditQuote(quote)}
+                className="h-8 px-2.5 text-xs text-text-2 border-border hover:bg-muted"
+                title="Editar Itinerario de la Reserva"
+              >
+                <Pencil className="mr-1.5 h-3.5 w-3.5 text-brand" />
+                Editar Itinerario
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={downloadingBookingPdf}
+              onClick={() => void handleDownloadBookingPdf()}
+              className="h-8 px-2.5 text-xs text-brand border-brand/30 hover:bg-brand-soft disabled:opacity-60"
+              title="Descargar Itinerario y Reserva en PDF"
+            >
+              {downloadingBookingPdf ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileDown className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {downloadingBookingPdf ? "Generando..." : "PDF Reserva"}
+            </Button>
+            <select
+              value={bookingStatus}
+              onChange={(e) => void handleStatusChange(e.target.value as BookingStatus)}
+              className="h-8 rounded-md border border-input bg-card px-2.5 text-xs font-bold text-foreground"
+            >
+              {BOOKING_STATUSES.map((st) => (
+                <option key={st.value} value={st.value}>
+                  {st.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowOverview(!showOverview)}
+              className="h-8 px-2.5 text-xs text-text-2 border-border hover:bg-muted"
+              title={showOverview ? "Ocultar resumen del viaje" : "Ver resumen del viaje"}
+            >
+              {showOverview ? (
+                <ChevronUp className="h-3.5 w-3.5 mr-1 text-brand" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 mr-1 text-brand" />
+              )}
+              {showOverview ? "Ocultar Resumen" : "Ver Resumen"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="h-8 px-2.5 text-xs text-text-2 border-border hover:bg-muted"
+              title={isFullscreen ? "Restaurar tamaño lateral" : "Pantalla completa"}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="h-3.5 w-3.5 mr-1" />
+              ) : (
+                <Maximize2 className="h-3.5 w-3.5 mr-1" />
+              )}
+              {isFullscreen ? "Restaurar" : "Pantalla Completa"}
+            </Button>
+            {layoutMode === "drawer" && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md p-1.5 text-text-3 hover:text-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            )}
+          </div>
         </header>
 
-        {/* Navigation Tabs */}
-        <div className="flex border-b bg-muted/10 px-5 gap-1 overflow-x-auto">
-          {[
-            { id: "amortization", label: "Amortización", icon: Calendar },
-            { id: "payments", label: `Abonos (${payments.length})`, icon: DollarSign },
-            { id: "passengers", label: `Pasajeros (${travelers.length})`, icon: Users },
-            { id: "supplierPayments", label: `Proveedores (${supplierItems.length})`, icon: Handshake },
-            { id: "operations", label: "Operación", icon: Plane },
-            { id: "vouchers", label: "Voucher", icon: Ticket },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isSelected = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                className={`flex items-center gap-1.5 border-b-2 py-3 px-3 text-xs font-semibold transition shrink-0 ${
-                  isSelected
-                    ? "border-brand text-brand"
-                    : "border-transparent text-text-3 hover:text-foreground"
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* Contenedor con Scroll Unificado para Resumen y Pestañas */}
+        <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+          {/* Sección de Resumen (Expandible / Colapsable) */}
+          <div className="border-b bg-muted/20 p-4 sm:p-5 space-y-3 shrink-0">
+            {/* Barra compacta cuando la sección está colapsada */}
+            {!showOverview && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-2.5 px-3.5 text-xs shadow-2xs">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-text-2">
+                  <span className="font-bold text-foreground flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-brand shrink-0" />
+                    {quote.destination}
+                  </span>
+                  <span className="text-text-3 hidden sm:inline">•</span>
+                  <span>
+                    <strong className="text-foreground">Salida:</strong> {quote.startDate || "N/A"} ({quote.nights} noches)
+                  </span>
+                  <span className="text-text-3 hidden sm:inline">•</span>
+                  <span>
+                    <strong className="text-foreground">Pasajeros:</strong> {quote.passengers} adultos
+                    {quote.childPassengers > 0 ? ` + ${quote.childPassengers} niños` : ""}
+                  </span>
+                </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                <div className="flex items-center gap-3 sm:gap-5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-text-3">
+                      Inversión: <strong className="text-foreground font-extrabold">{formatCurrency(quote.totals.finalTotal, quote.currency)}</strong>
+                    </span>
+                    <span className="text-text-3">•</span>
+                    <span className="text-text-3">
+                      Saldo Pendiente: <strong className="text-amber-600 font-extrabold">{formatCurrency(balanceRemaining, quote.currency)}</strong>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowOverview(true)}
+                    className="text-brand hover:underline font-semibold text-xs flex items-center gap-1"
+                  >
+                    <span>Expandir</span>
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Bloque completo cuando la sección está expandida */}
+            {showOverview && (
+              <>
+                {/* Info bar with destination, dates and customer info */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-card p-3 rounded-xl border text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
+                      Destino
+                    </span>
+                    <span className="font-semibold text-foreground flex items-center gap-1 mt-0.5 truncate">
+                      <MapPin className="h-3 w-3 text-brand shrink-0" />
+                      {quote.destination}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
+                      Salida y Noches
+                    </span>
+                    <span className="font-semibold text-foreground mt-0.5 block">
+                      {quote.startDate || "N/A"} ({quote.nights} noches)
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
+                      Contacto Principal
+                    </span>
+                    <span className="font-semibold text-foreground mt-0.5 block truncate">
+                      {quote.clientPhone || quote.clientEmail || "Sin datos"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider block">
+                      Pasajeros
+                    </span>
+                    <span className="font-semibold text-foreground mt-0.5 block">
+                      {quote.passengers} adultos {quote.childPassengers > 0 ? `+ ${quote.childPassengers} niños` : ""}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metrics summary cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="rounded-xl border bg-card p-3.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
+                        Total del Viaje
+                      </span>
+                      <DollarSign className="h-4 w-4 text-emerald-500" />
+                    </div>
+                    <span className="text-xl font-extrabold text-foreground block">
+                      {formatCurrency(quote.totals.finalTotal, quote.currency)}
+                    </span>
+                    <span className="text-[11px] text-emerald-600 font-semibold block">
+                      Inversión confirmada
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border bg-card p-3.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
+                        Saldo Pendiente
+                      </span>
+                      <AlertCircle className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <span className="text-xl font-extrabold text-amber-600 block">
+                      {formatCurrency(balanceRemaining, quote.currency)}
+                    </span>
+                    <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden mt-1.5">
+                      <div
+                        className="bg-emerald-500 h-full transition-all"
+                        style={{ width: `${percentagePaid}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-card p-3.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-text-3">
+                        Por Programar
+                      </span>
+                      <Clock className="h-4 w-4 text-brand" />
+                    </div>
+                    <span className="text-xl font-extrabold text-foreground block">
+                      {formatCurrency(remainingToSchedule, quote.currency)}
+                    </span>
+                    <span className="text-[11px] text-text-3 font-semibold block">
+                      {(quote.amortizationSchedule || []).length} cuotas pactadas
+                    </span>
+                  </div>
+                </div>
+
+                {/* Billing & Counter details (Colapsable para no tapar el contenido de las pestañas) */}
+                <div className="rounded-xl border bg-card p-2.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setShowBillingHeader(!showBillingHeader)}
+                      className="text-xs font-bold text-text-2 hover:text-foreground flex items-center gap-1.5"
+                    >
+                      <span>Datos de Facturación & Counter</span>
+                      <span className="text-[10px] text-text-3 font-normal">
+                        {showBillingHeader ? "(Ocultar)" : "(Ver/Editar)"}
+                      </span>
+                    </button>
+                    {showBillingHeader && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-[11px]"
+                        onClick={handleSaveBilling}
+                        disabled={savingBilling}
+                      >
+                        {savingBilling ? "Guardando..." : "Guardar Facturación"}
+                      </Button>
+                    )}
+                  </div>
+                  {showBillingHeader && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-t pt-2">
+                      <Input
+                        placeholder="A quién facturamos (Razón Social / Nombre)"
+                        value={billingName}
+                        onChange={(e) => setBillingName(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                      <Input
+                        placeholder="NIT / Documento Factura"
+                        value={billingId}
+                        onChange={(e) => setBillingId(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                      <Input
+                        placeholder="Counter Responsable"
+                        value={counterName}
+                        onChange={(e) => setCounterName(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Navigation Tabs (Sticky en el top del scroll) */}
+          <div className="sticky top-0 z-20 flex border-b bg-card/95 backdrop-blur-xs px-5 gap-1 overflow-x-auto shadow-2xs">
+            {[
+              { id: "amortization", label: "Amortización", icon: Calendar },
+              { id: "payments", label: `Abonos (${payments.length})`, icon: DollarSign },
+              { id: "passengers", label: `Pasajeros (${travelers.length})`, icon: Users },
+              { id: "supplierPayments", label: `Proveedores (${supplierItems.length})`, icon: Handshake },
+              { id: "operations", label: "Operación", icon: Plane },
+              { id: "vouchers", label: "Voucher", icon: Ticket },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isSelected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                  className={`flex items-center gap-1.5 border-b-2 py-3 px-3 text-xs font-semibold transition shrink-0 ${
+                    isSelected
+                      ? "border-brand text-brand"
+                      : "border-transparent text-text-3 hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-5 space-y-4 flex-1">
           {/* 1. Amortización */}
           {activeTab === "amortization" && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
                 <div>
-                  <h3 className="font-bold text-sm text-foreground">
-                    Cronograma de Amortización & Cuotas
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-sm text-foreground">
+                      Cronograma de Amortización & Cuotas
+                    </h3>
+                    {hasExistingPayments && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded font-semibold">
+                        <AlertCircle className="h-3 w-3" />
+                        Abonos activos: plan automático protegido
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-text-3">
                     Fechas y montos de pago acordados con el cliente.
                   </p>
@@ -1161,8 +1174,14 @@ export function TripDrawer({
                   <Button
                     size="sm"
                     variant="outline"
+                    disabled={hasExistingPayments}
                     onClick={() => setAutoPlanOpen(true)}
-                    className="h-8 text-xs"
+                    className="h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={
+                      hasExistingPayments
+                        ? "Plan automático bloqueado: la reserva ya tiene abonos registrados. Realiza ajustes mediante cuota manual."
+                        : "Generar cronograma automático de cuotas"
+                    }
                   >
                     Plan Automático
                   </Button>
@@ -1188,146 +1207,6 @@ export function TripDrawer({
                   </Button>
                 </div>
               </div>
-
-              {/* Formulario Auto Plan Modal */}
-              {autoPlanOpen && (
-                <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <h4 className="text-xs font-bold text-foreground">
-                      Generar Plan de Pagos Automático
-                    </h4>
-                    <button
-                      onClick={() => setAutoPlanOpen(false)}
-                      className="text-text-3 hover:text-foreground"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-text-3">
-                    Se distribuirá el saldo pendiente ({formatCurrency(balanceRemaining, quote.currency)}) en cuotas periódicas, respetando los pagos que ya estén registrados.
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-text-2">
-                        Número de Cuotas
-                      </label>
-                      <Input
-                        type="number"
-                        min="1"
-                        max="24"
-                        value={autoPlanCount}
-                        onChange={(e) => setAutoPlanCount(Number(e.target.value) || 1)}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-text-2">
-                        Frecuencia
-                      </label>
-                      <select
-                        value={autoPlanFrequency}
-                        onChange={(e) =>
-                          setAutoPlanFrequency(e.target.value as "weekly" | "fortnightly" | "monthly")
-                        }
-                        className="w-full h-8 rounded-md border border-input bg-card px-2 text-xs font-semibold"
-                      >
-                        <option value="weekly">Semanal</option>
-                        <option value="fortnightly">Quincenal</option>
-                        <option value="monthly">Mensual</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-text-2">
-                        Fecha Primera Cuota
-                      </label>
-                      <Input
-                        type="date"
-                        value={autoPlanFirstDate}
-                        onChange={(e) => setAutoPlanFirstDate(e.target.value)}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAutoPlanOpen(false)}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button size="sm" onClick={handleCreateAutoPlan}>
-                      Aplicar Plan
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Formulario Cuota Manual */}
-              {manualInstallmentOpen && (
-                <form
-                  onSubmit={handleAddManualInstallment}
-                  className="rounded-xl border bg-muted/20 p-4 space-y-3"
-                >
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <h4 className="text-xs font-bold text-foreground">
-                      Agregar Cuota Manual
-                    </h4>
-                    <button
-                      onClick={() => setManualInstallmentOpen(false)}
-                      className="text-text-3 hover:text-foreground"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-text-2">
-                        Monto de la cuota ({quote.currency})
-                      </label>
-                      <Input
-                        type="number"
-                        min="1"
-                        value={manualInstallmentAmount}
-                        onChange={(e) =>
-                          setManualInstallmentAmount(
-                            e.target.value === "" ? "" : Number(e.target.value)
-                          )
-                        }
-                        placeholder="Ej. 500000"
-                        required
-                        className="h-8 text-xs font-bold"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-text-2">
-                        Fecha de Vencimiento
-                      </label>
-                      <Input
-                        type="date"
-                        value={manualInstallmentDueDate}
-                        onChange={(e) => setManualInstallmentDueDate(e.target.value)}
-                        required
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setManualInstallmentOpen(false)}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button type="submit" size="sm">
-                      Guardar Cuota
-                    </Button>
-                  </div>
-                </form>
-              )}
 
               {/* Installments List */}
               {(quote.amortizationSchedule || []).length === 0 ? (
@@ -2181,6 +2060,7 @@ export function TripDrawer({
             </div>
           )}
         </div>
+        </div>
       </div>
 
       {paymentModalOpen && (
@@ -2194,6 +2074,30 @@ export function TripDrawer({
           onSaved={() => {
             void loadPayments();
             setPaymentModalOpen(false);
+          }}
+        />
+      )}
+
+      {autoPlanOpen && (
+        <AutoPlanModal
+          isOpen={autoPlanOpen}
+          onClose={() => setAutoPlanOpen(false)}
+          balanceRemaining={balanceRemaining}
+          currency={quote.currency}
+          onApplyPlan={async (count, frequency, firstDate) => {
+            await handleCreateAutoPlan(count, frequency, firstDate);
+          }}
+        />
+      )}
+
+      {manualInstallmentOpen && (
+        <ManualInstallmentModal
+          isOpen={manualInstallmentOpen}
+          onClose={() => setManualInstallmentOpen(false)}
+          maxAllowedAmount={remainingToSchedule}
+          currency={quote.currency}
+          onAddInstallment={async (amount, dueDate) => {
+            await handleAddManualInstallment(amount, dueDate);
           }}
         />
       )}
