@@ -52,6 +52,8 @@ export async function createLeadForContact(input: {
   /** Quién dio de alta: el webhook es `sistema`, la captura manual `dueno`. */
   source?: StageChangeSource;
   actorUserId?: string | null;
+  amountCents?: number | null;
+  currency?: string | null;
 }): Promise<{ id: string; stageId: string } | null> {
   const db = getDb();
 
@@ -90,6 +92,8 @@ export async function createLeadForContact(input: {
       contactId: input.contactId,
       stageId,
       position: (maxPos[0]?.max ?? -1) + 1,
+      amountCents: input.amountCents ?? null,
+      currency: input.currency ?? null,
       lastActivityAt: input.at ?? null,
     })
     .onConflictDoNothing({ target: [schema.lead.contactId] })

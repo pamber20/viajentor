@@ -4,6 +4,8 @@ import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { normalizeText } from "@/lib/search";
 import { calculateDetailedQuoteTotals } from "@/lib/travel/pricing";
+import { normalizeMx } from "@/lib/meta/client";
+import { createLeadForContact } from "@/server/inbox/lead-activity";
 import type {
   BookingStatus,
   QuoteStatus,
@@ -330,6 +332,7 @@ export type CreateQuoteInput = {
   policies?: string | null;
   bookingConfirmation?: string | null;
   pnrExpiration?: string | null;
+  pipelineStageId?: string | null;
   billingName?: string | null;
   billingId?: string | null;
   counterName?: string | null;
@@ -343,24 +346,151 @@ export async function createQuote(input: CreateQuoteInput): Promise<TravelQuoteD
   const id = newId("travelQuote");
   const quoteNumber = await generateQuoteNumber(input.organizationId);
 
-  // Si viene contactId pero no leadId, buscar el lead activo del contacto para asociarlo automáticamente
-  let resolvedLeadId = input.leadId;
-  if (!resolvedLeadId && input.contactId) {
-    const activeLead = await db
-      .select({ id: schema.lead.id })
-      .from(schema.lead)
+  // 1. Resolver o Crear Contacto automáticamente si no viene contactId
+  let resolvedContactId = input.contactId ?? null;
+  const rawPhone = input.clientPhone?.trim();
+  const rawName = input.clientName.trim();
+
+  if (!resolvedContactId && rawPhone) {
+    const phoneDigits = rawPhone.replace(/\D/g, "");
+    if (phoneDigits.length >= 7) {
+      const canonicalPhone = normalizeMx(phoneDigits);
+
+      // Buscar si ya existe el contacto en la organización
+      const existing = await db
+        .select({ id: schema.contact.id })
+        .from(schema.contact)
+        .where(
+          scoped(
+            schema.contact.organizationId,
+            input.organizationId,
+            or(
+              eq(schema.contact.phone, canonicalPhone),
+              eq(schema.contact.waIdentity, canonicalPhone)
+            )
+          )
+        )
+        .limit(1);
+
+      if (existing[0]) {
+        resolvedContactId = existing[0].id;
+      } else {
+        // Crear nuevo contacto en el CRM
+        const contactId = newId("contact");
+        const [newContact] = await db
+          .insert(schema.contact)
+          .values({
+            id: contactId,
+            organizationId: input.organizationId,
+            name: rawName,
+            phone: canonicalPhone,
+            waIdentity: canonicalPhone,
+            source: "otro",
+          })
+          .onConflictDoNothing({
+            target: [
+              schema.contact.organizationId,
+              schema.contact.channel,
+              schema.contact.waIdentity,
+            ],
+          })
+          .returning({ id: schema.contact.id });
+
+        resolvedContactId = newContact?.id ?? contactId;
+      }
+    }
+  }
+
+  // 2. Resolver etapa destino en el Pipeline (Etapa explícita o búsqueda por 'Cotizado' / primera abierta)
+  let targetStageId = input.pipelineStageId ?? null;
+  if (!targetStageId) {
+    const openStages = await db
+      .select({ id: schema.pipelineStage.id, name: schema.pipelineStage.name })
+      .from(schema.pipelineStage)
       .where(
         scoped(
-          schema.lead.organizationId,
+          schema.pipelineStage.organizationId,
           input.organizationId,
-          eq(schema.lead.contactId, input.contactId)
+          eq(schema.pipelineStage.kind, "open")
         )
       )
-      .orderBy(desc(schema.lead.createdAt))
-      .limit(1);
+      .orderBy(schema.pipelineStage.position);
 
-    if (activeLead[0]) {
-      resolvedLeadId = activeLead[0].id;
+    const cotizadoStage = openStages.find((s) =>
+      s.name.toLowerCase().includes("cotizad")
+    );
+    targetStageId = cotizadoStage ? cotizadoStage.id : (openStages[0]?.id ?? null);
+  }
+
+  // 3. Resolver o Crear Lead en el Pipeline para el contacto
+  let resolvedLeadId = input.leadId ?? null;
+  if (resolvedContactId) {
+    if (!resolvedLeadId) {
+      const activeLead = await db
+        .select({ id: schema.lead.id })
+        .from(schema.lead)
+        .where(
+          scoped(
+            schema.lead.organizationId,
+            input.organizationId,
+            eq(schema.lead.contactId, resolvedContactId)
+          )
+        )
+        .orderBy(desc(schema.lead.createdAt))
+        .limit(1);
+
+      if (activeLead[0]) {
+        resolvedLeadId = activeLead[0].id;
+      }
+    }
+
+    // Calcular el total aproximado de la cotización para fijarlo en el lead
+    const preliminaryTotals = calculateDetailedQuoteTotals({
+      passengers: input.passengers ?? 1,
+      childPassengers: input.childPassengers ?? 0,
+      currency: input.currency ?? "COP",
+      markupPercentage: input.markupPercentage ?? 15,
+      taxes: input.taxes ?? 0,
+      agencyCommission: input.agencyCommission ?? 0,
+      administrativeFee: input.administrativeFee ?? 0,
+      profitability: input.profitability ?? 75,
+      days: input.days ?? [],
+    });
+    const quoteAmountCents = Math.round(preliminaryTotals.finalTotal * 100);
+
+    if (!resolvedLeadId) {
+      // Crear nuevo Lead en el pipeline en la etapa identificada (ej. "Cotizado")
+      const createdLead = await createLeadForContact({
+        organizationId: input.organizationId,
+        contactId: resolvedContactId,
+        stageId: targetStageId ?? undefined,
+        source: "dueno",
+        actorUserId: input.assignedUserId ?? null,
+        amountCents: quoteAmountCents > 0 ? quoteAmountCents : null,
+        currency: input.currency ?? "COP",
+      });
+      if (createdLead) {
+        resolvedLeadId = createdLead.id;
+      }
+    } else {
+      // Actualizar monto de la negociación y última actividad si el lead ya existía
+      if (quoteAmountCents > 0) {
+        await db
+          .update(schema.lead)
+          .set({
+            amountCents: quoteAmountCents,
+            currency: input.currency ?? "COP",
+            lastActivityAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            scoped(
+              schema.lead.organizationId,
+              input.organizationId,
+              eq(schema.lead.id, resolvedLeadId)
+            )
+          );
+      }
     }
   }
 
@@ -369,8 +499,8 @@ export async function createQuote(input: CreateQuoteInput): Promise<TravelQuoteD
     .values({
       id,
       organizationId: input.organizationId,
-      contactId: input.contactId ?? null,
-      leadId: resolvedLeadId ?? null,
+      contactId: resolvedContactId,
+      leadId: resolvedLeadId,
       assignedUserId: input.assignedUserId ?? null,
       quoteNumber,
       isBooking: false,
@@ -562,7 +692,29 @@ export async function updateQuote(input: UpdateQuoteInput): Promise<TravelQuoteD
     .returning();
 
   if (!updated) return null;
-  return serializeQuote(updated);
+  const serialized = serializeQuote(updated);
+
+  // Sincronizar el monto del lead si existe
+  if (serialized.leadId && serialized.totals.finalTotal > 0) {
+    const updatedAmountCents = Math.round(serialized.totals.finalTotal * 100);
+    await db
+      .update(schema.lead)
+      .set({
+        amountCents: updatedAmountCents,
+        currency: serialized.currency,
+        lastActivityAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        scoped(
+          schema.lead.organizationId,
+          input.organizationId,
+          eq(schema.lead.id, serialized.leadId)
+        )
+      );
+  }
+
+  return serialized;
 }
 
 export async function deleteQuote(input: {

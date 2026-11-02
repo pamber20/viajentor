@@ -156,7 +156,12 @@ export function QuoteBuilder({
   const isEditing = !!initialQuote;
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Basic Info
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(
+    initialQuote?.contactId ?? contactId ?? null
+  );
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(
+    initialQuote?.leadId ?? leadId ?? null
+  );
   const [clientName, setClientName] = useState(
     initialQuote?.clientName ?? initialClientName ?? ""
   );
@@ -177,6 +182,13 @@ export function QuoteBuilder({
   const [quoteDate, setQuoteDate] = useState(
     initialQuote?.quoteDate ?? new Date().toISOString().split("T")[0]
   );
+
+  // Integración con Pipeline y Contactos
+  const [pipelineStages, setPipelineStages] = useState<{ id: string; name: string; kind: string }[]>([]);
+  const [pipelineStageId, setPipelineStageId] = useState<string>("");
+  const [contactSuggestions, setContactSuggestions] = useState<Array<{ id: string; name: string; phone: string | null; stageName: string | null }>>([]);
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const [searchingContacts, setSearchingContacts] = useState(false);
 
   // Financial Config
   const [currency, setCurrency] = useState<TravelCurrency>(
@@ -294,6 +306,66 @@ export function QuoteBuilder({
     void loadPackage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPackageId]);
+
+  // Cargar etapas del Pipeline
+  useEffect(() => {
+    let active = true;
+    async function loadStages() {
+      try {
+        const res = await fetch("/api/pipeline/stages", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { stages: { id: string; name: string; kind: string }[] };
+        if (active && data.stages) {
+          const openOnly = data.stages.filter((s) => s.kind === "open");
+          setPipelineStages(openOnly);
+          // Auto-seleccionar "Cotizado" o la primera etapa abierta si no hay seleccionada
+          if (!pipelineStageId && openOnly.length > 0) {
+            const cotizado = openOnly.find((s) => s.name.toLowerCase().includes("cotizad"));
+            const firstOpen = openOnly[0];
+            setPipelineStageId(cotizado ? cotizado.id : (firstOpen ? firstOpen.id : ""));
+          }
+        }
+      } catch (e) {
+        console.error("Error al cargar etapas del pipeline:", e);
+      }
+    }
+    void loadStages();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Búsqueda en vivo de contactos por nombre o teléfono
+  useEffect(() => {
+    if (selectedContactId || !clientName.trim() || clientName.length < 2) {
+      setContactSuggestions([]);
+      return;
+    }
+
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        setSearchingContacts(true);
+        const res = await fetch(`/api/contacts?q=${encodeURIComponent(clientName.trim())}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          contacts: Array<{ id: string; name: string; phone: string | null; stageName: string | null }>;
+        };
+        if (active && data.contacts) {
+          setContactSuggestions(data.contacts.slice(0, 5));
+        }
+      } catch (e) {
+        console.error("Error al buscar contactos:", e);
+      } finally {
+        if (active) setSearchingContacts(false);
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [clientName, selectedContactId]);
 
   async function handleSaveAsPackage() {
     if (!destination.trim()) {
@@ -1021,8 +1093,9 @@ export function QuoteBuilder({
     setError(null);
 
     const payload = {
-      contactId: contactId ?? initialQuote?.contactId ?? null,
-      leadId: leadId ?? initialQuote?.leadId ?? null,
+      contactId: selectedContactId ?? contactId ?? initialQuote?.contactId ?? null,
+      leadId: selectedLeadId ?? leadId ?? initialQuote?.leadId ?? null,
+      pipelineStageId: pipelineStageId || null,
       clientName: clientName.trim(),
       clientPhone: clientPhone.trim() || null,
       clientEmail: clientEmail.trim() || null,
@@ -1229,69 +1302,171 @@ export function QuoteBuilder({
             </button>
 
             {showClient && (
-              <div className="p-4 border-t bg-muted/10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-3.5">
-                <div className="space-y-1 sm:col-span-2 md:col-span-1 2xl:col-span-2">
-                  <label className="text-xs font-semibold text-text-2">Nombre Completo *</label>
-                  <Input
-                    value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
-                    placeholder="María García López"
-                    required
-                  />
+              <div className="p-4 border-t bg-muted/10 space-y-4">
+                {/* Banner de Sincronización con CRM y Pipeline */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 rounded-lg bg-brand-soft/40 border border-brand-soft px-3.5 py-2.5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-full bg-brand-soft p-1 text-brand-text">
+                      <Layers className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      {selectedContactId ? (
+                        <span className="font-semibold text-brand-text">
+                          ✓ Cliente vinculado del CRM. Se sincronizará la cotización en su tarjeta de Pipeline.
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Si el cliente es nuevo, se creará automáticamente en <strong>Contactos</strong> y se registrará su tarjeta en el <strong>Pipeline de Ventas</strong>.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedContactId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedContactId(null);
+                        setSelectedLeadId(null);
+                      }}
+                      className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground"
+                    >
+                      Desvincular ficha
+                    </Button>
+                  )}
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-text-2">Teléfono / WhatsApp</label>
-                  <Input
-                    value={clientPhone}
-                    onChange={(e) => setClientPhone(e.target.value)}
-                    placeholder="+57 300 000 0000"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-text-2">Correo Electrónico</label>
-                  <Input
-                    type="email"
-                    value={clientEmail}
-                    onChange={(e) => setClientEmail(e.target.value)}
-                    placeholder="cliente@correo.com"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-text-2">Ciudad de Origen</label>
-                  <Input
-                    value={originCity}
-                    onChange={(e) => {
-                      const c = e.target.value;
-                      setOriginCity(c);
-                      const mapped = CITY_AIRPORT_MAP[c.toLowerCase().trim()];
-                      if (mapped && !departureAirport) setDepartureAirport(mapped);
-                    }}
-                    placeholder="Bogotá, Medellín..."
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-text-2">Motivo del Viaje</label>
-                  <Input
-                    value={travelReason}
-                    onChange={(e) => setTravelReason(e.target.value)}
-                    placeholder="Luna de miel, Familiar, Negocios..."
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-text-2">Asesor Responsable</label>
-                  <Input
-                    value={advisorName}
-                    onChange={(e) => setAdvisorName(e.target.value)}
-                    placeholder="Nombre del asesor"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-text-2">Fecha de Cotización</label>
-                  <Input
-                    type="date"
-                    value={quoteDate}
-                    onChange={(e) => setQuoteDate(e.target.value)}
-                  />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8 gap-3.5">
+                  {/* Nombre con búsqueda reactiva de contactos */}
+                  <div className="relative space-y-1 sm:col-span-2 md:col-span-1 2xl:col-span-2">
+                    <label className="text-xs font-semibold text-text-2 flex items-center justify-between">
+                      <span>Nombre Completo *</span>
+                      {searchingContacts && (
+                        <span className="text-[10px] text-muted-foreground">Buscando...</span>
+                      )}
+                    </label>
+                    <Input
+                      value={clientName}
+                      onChange={(e) => {
+                        setClientName(e.target.value);
+                        setShowContactDropdown(true);
+                      }}
+                      onFocus={() => setShowContactDropdown(true)}
+                      placeholder="Buscar o escribir nombre del cliente..."
+                      required
+                    />
+
+                    {/* Menú de sugerencias de contactos existentes */}
+                    {showContactDropdown && contactSuggestions.length > 0 && !selectedContactId && (
+                      <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-auto rounded-lg border bg-popover p-1 shadow-lg">
+                        <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b mb-1">
+                          Clientes encontrados en el CRM
+                        </div>
+                        {contactSuggestions.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedContactId(c.id);
+                              setClientName(c.name);
+                              if (c.phone) setClientPhone(c.phone);
+                              setShowContactDropdown(false);
+                              toast(`Cliente "${c.name}" vinculado a la cotización`, "info");
+                            }}
+                            className="w-full flex items-center justify-between rounded px-2.5 py-1.5 text-left text-xs hover:bg-muted/80 transition"
+                          >
+                            <div>
+                              <div className="font-semibold text-foreground">{c.name}</div>
+                              <div className="text-[11px] text-muted-foreground">{c.phone || "Sin teléfono"}</div>
+                            </div>
+                            {c.stageName && (
+                              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                                {c.stageName}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Teléfono / WhatsApp</label>
+                    <Input
+                      value={clientPhone}
+                      onChange={(e) => setClientPhone(e.target.value)}
+                      placeholder="+57 300 000 0000"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Correo Electrónico</label>
+                    <Input
+                      type="email"
+                      value={clientEmail}
+                      onChange={(e) => setClientEmail(e.target.value)}
+                      placeholder="cliente@correo.com"
+                    />
+                  </div>
+
+                  {/* Selector de Etapa del Pipeline */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Etapa en Pipeline</label>
+                    <select
+                      value={pipelineStageId}
+                      onChange={(e) => setPipelineStageId(e.target.value)}
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      {pipelineStages.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Ciudad de Origen</label>
+                    <Input
+                      value={originCity}
+                      onChange={(e) => {
+                        const c = e.target.value;
+                        setOriginCity(c);
+                        const mapped = CITY_AIRPORT_MAP[c.toLowerCase().trim()];
+                        if (mapped && !departureAirport) setDepartureAirport(mapped);
+                      }}
+                      placeholder="Bogotá, Medellín..."
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Motivo del Viaje</label>
+                    <Input
+                      value={travelReason}
+                      onChange={(e) => setTravelReason(e.target.value)}
+                      placeholder="Luna de miel, Familiar..."
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Asesor Responsable</label>
+                    <Input
+                      value={advisorName}
+                      onChange={(e) => setAdvisorName(e.target.value)}
+                      placeholder="Nombre del asesor"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Fecha Cotización</label>
+                    <Input
+                      type="date"
+                      value={quoteDate}
+                      onChange={(e) => setQuoteDate(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
             )}
