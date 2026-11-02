@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Compass,
   DollarSign,
   Edit2,
   ExternalLink,
@@ -34,7 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCurrency } from "@/lib/travel/pricing";
+import { formatCurrency, distributePaymentToInstallments } from "@/lib/travel/pricing";
 import type {
   BookingStatus,
   TravelDay,
@@ -205,9 +206,33 @@ export function TripDrawer({
       ? Math.min(100, Math.round((totalPaid / quote.totals.finalTotal) * 100))
       : 0;
 
+  const liveInstallments = useMemo(() => {
+    const schedule = quote.amortizationSchedule || [];
+    if (schedule.length === 0) return [];
+
+    const paidMap: Record<string, number> = {};
+    let unassignedAmount = 0;
+
+    for (const p of payments) {
+      if (p.installmentId && schedule.some((inst) => inst.id === p.installmentId)) {
+        paidMap[p.installmentId] = (paidMap[p.installmentId] || 0) + p.amount;
+      } else {
+        unassignedAmount += p.amount;
+      }
+    }
+
+    const { updatedInstallments } = distributePaymentToInstallments(
+      schedule,
+      paidMap,
+      unassignedAmount
+    );
+
+    return updatedInstallments;
+  }, [quote.amortizationSchedule, payments]);
+
   const hasExistingPayments =
     payments.length > 0 ||
-    (quote.amortizationSchedule || []).some(
+    liveInstallments.some(
       (inst) => inst.status === "paid" || inst.status === "partial"
     );
 
@@ -486,6 +511,7 @@ export function TripDrawer({
         try {
           const res = await fetch(`/api/travel/payments/${id}`, { method: "DELETE" });
           if (res.ok) {
+            setPayments((prev) => prev.filter((p) => p.id !== id));
             void loadPayments();
             const qRes = await fetch(`/api/travel/quotes/${quote.id}`);
             if (qRes.ok) {
@@ -930,7 +956,7 @@ export function TripDrawer({
         </header>
 
         {/* Contenedor con Scroll Unificado para Resumen y Pestañas */}
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0 bg-muted/15">
           {/* Sección de Resumen (Expandible / Colapsable) */}
           <div className="border-b bg-muted/20 p-4 sm:p-5 space-y-3">
             {/* Barra compacta cuando la sección está colapsada */}
@@ -1119,13 +1145,13 @@ export function TripDrawer({
           </div>
 
           {/* Navigation Tabs (Sticky en el top del scroll) */}
-          <div className="sticky top-0 z-30 bg-card border-b shadow-xs">
-            <div className="flex items-center justify-between sm:justify-start px-2 sm:px-4 gap-1 overflow-x-auto">
+          <div className="sticky top-0 z-30 bg-card border-b shadow-xs px-3 sm:px-6 py-2.5">
+            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
               {[
-                { id: "amortization", label: "Amortización", icon: Calendar },
-                { id: "payments", label: `Abonos (${payments.length})`, icon: DollarSign },
+                { id: "amortization", label: "Plan Amortización", icon: Calendar },
+                { id: "payments", label: `Historial Abonos (${payments.length})`, icon: DollarSign },
                 { id: "passengers", label: `Pasajeros (${travelers.length})`, icon: Users },
-                { id: "supplierPayments", label: `Proveedores (${supplierItems.length})`, icon: Handshake },
+                { id: "supplierPayments", label: `Pagos Proveedores (${supplierItems.length})`, icon: Handshake },
                 { id: "operations", label: "Operación", icon: Plane },
                 { id: "vouchers", label: "Voucher", icon: Ticket },
               ].map((tab) => {
@@ -1136,10 +1162,10 @@ export function TripDrawer({
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                    className={`flex items-center gap-1.5 border-b-2 py-2.5 px-2.5 sm:px-3.5 text-xs font-semibold transition shrink-0 whitespace-nowrap ${
+                    className={`flex items-center gap-1.5 py-1.5 px-3.5 sm:px-4 rounded-full text-xs font-bold uppercase tracking-wider transition shrink-0 whitespace-nowrap ${
                       isSelected
-                        ? "border-brand text-brand"
-                        : "border-transparent text-text-3 hover:text-foreground"
+                        ? "bg-slate-800 text-white shadow-xs dark:bg-slate-200 dark:text-slate-900"
+                        : "text-text-3 hover:text-foreground hover:bg-muted/60"
                     }`}
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -1151,28 +1177,33 @@ export function TripDrawer({
           </div>
 
           {/* Tab Content */}
-          <div className="p-4 sm:p-5 space-y-4">
+          <div className="p-4 sm:p-6 space-y-6">
           {/* 1. Amortización */}
           {activeTab === "amortization" && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-sm text-foreground">
-                      Cronograma de Amortización & Cuotas
-                    </h3>
-                    {hasExistingPayments && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded font-semibold">
-                        <AlertCircle className="h-3 w-3" />
-                        Abonos activos: plan automático protegido
-                      </span>
-                    )}
+            <div className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-md space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded-lg bg-brand-soft p-2 text-brand-text">
+                    <Calendar className="h-5 w-5" />
                   </div>
-                  <p className="text-xs text-text-3">
-                    Fechas y montos de pago acordados con el cliente.
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-sm sm:text-base text-foreground">
+                        Cronograma de Amortización & Cuotas
+                      </h3>
+                      {hasExistingPayments && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded font-semibold">
+                          <AlertCircle className="h-3 w-3" />
+                          Abonos activos: plan automático protegido
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-text-3 mt-0.5">
+                      Fechas y montos de pago acordados con el cliente.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
                     variant="outline"
@@ -1185,7 +1216,7 @@ export function TripDrawer({
                         : "Generar cronograma automático de cuotas"
                     }
                   >
-                    Plan Automático
+                    <Clock className="h-3.5 w-3.5 mr-1" /> Plan Automático
                   </Button>
                   <Button
                     size="sm"
@@ -1211,15 +1242,19 @@ export function TripDrawer({
               </div>
 
               {/* Installments List */}
-              {(quote.amortizationSchedule || []).length === 0 ? (
-                <p className="text-xs text-text-3 italic p-4 text-center border rounded-lg">
+              {liveInstallments.length === 0 ? (
+                <div className="rounded-2xl border-2 border-dashed border-border/80 p-8 text-center text-xs text-text-3 font-medium bg-muted/10">
                   Sin plan de cuotas registrado. Genera un plan automático o agrega cuotas manuales.
-                </p>
+                </div>
               ) : (
-                <div className="space-y-2">
-                  {(quote.amortizationSchedule || []).map((inst, idx) => {
+                <div className="space-y-2.5">
+                  {liveInstallments.map((inst, idx) => {
                     const isPaid = inst.status === "paid";
                     const isPartial = inst.status === "partial";
+                    const paidForThis = payments
+                      .filter((p) => p.installmentId === inst.id)
+                      .reduce((s, p) => s + p.amount, 0);
+
                     return (
                       <div
                         key={inst.id}
@@ -1228,7 +1263,7 @@ export function TripDrawer({
                             ? "bg-emerald-500/5 border-emerald-500/30"
                             : isPartial
                             ? "bg-amber-500/5 border-amber-500/30"
-                            : "bg-card"
+                            : "bg-card border-border/70 shadow-2xs"
                         }`}
                       >
                         <div className="space-y-1">
@@ -1237,16 +1272,21 @@ export function TripDrawer({
                               {inst.code || `Cuota ${idx + 1}`}
                             </span>
                             <span
-                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                              className={`rounded px-2 py-0.5 text-[10px] font-bold border ${
                                 isPaid
-                                  ? "bg-emerald-500/20 text-emerald-600"
+                                  ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30 flex items-center gap-1"
                                   : isPartial
-                                  ? "bg-amber-500/20 text-amber-600"
-                                  : "bg-muted text-text-3"
+                                  ? "bg-amber-500/20 text-amber-600 border-amber-500/30"
+                                  : "bg-muted text-text-3 border-transparent"
                               }`}
                             >
-                              {isPaid ? "PAGADA" : isPartial ? "ABONO PARCIAL" : "PENDIENTE"}
+                              {isPaid ? "✓ PAGADA" : isPartial ? "ABONO PARCIAL" : "PENDIENTE"}
                             </span>
+                            {isPartial && paidForThis > 0 && (
+                              <span className="text-[11px] text-text-3 font-medium">
+                                (Abonado: {formatCurrency(paidForThis, quote.currency)})
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 text-text-3 text-[11px]">
                             <Clock className="h-3 w-3" />
@@ -1259,6 +1299,11 @@ export function TripDrawer({
                             <span className="font-extrabold text-sm text-foreground block">
                               {formatCurrency(inst.amount, quote.currency)}
                             </span>
+                            {isPartial && paidForThis > 0 && (
+                              <span className="text-[10px] text-amber-600 font-bold block">
+                                Restan: {formatCurrency(Math.max(0, inst.amount - paidForThis), quote.currency)}
+                              </span>
+                            )}
                           </div>
 
                           {!isPaid && (
@@ -1268,7 +1313,8 @@ export function TripDrawer({
                               className="h-7 text-xs border-emerald-500/30 text-emerald-600 hover:bg-emerald-50"
                               onClick={() => {
                                 setTargetedInstallmentId(inst.id);
-                                setSuggestedPaymentAmount(inst.amount);
+                                const remainingForThis = Math.max(0, inst.amount - paidForThis);
+                                setSuggestedPaymentAmount(remainingForThis > 0 ? remainingForThis : inst.amount);
                                 setPaymentModalOpen(true);
                               }}
                             >
@@ -1295,15 +1341,20 @@ export function TripDrawer({
 
           {/* 2. Abonos y Pagos */}
           {activeTab === "payments" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <div>
-                  <h3 className="font-bold text-sm text-foreground">
-                    Historial de Abonos & Recibos de Caja
-                  </h3>
-                  <p className="text-xs text-text-3">
-                    Registro contable de pagos efectuados por el cliente.
-                  </p>
+            <div className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-md space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-600">
+                    <DollarSign className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm sm:text-base text-foreground">
+                      Historial de Abonos & Recibos de Caja
+                    </h3>
+                    <p className="text-xs text-text-3 mt-0.5">
+                      Registro contable de pagos efectuados por el cliente.
+                    </p>
+                  </div>
                 </div>
                 <Button
                   size="sm"
@@ -1312,7 +1363,7 @@ export function TripDrawer({
                     setSuggestedPaymentAmount(balanceRemaining > 0 ? balanceRemaining : undefined);
                     setPaymentModalOpen(true);
                   }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs"
                 >
                   <Plus className="mr-1 h-3.5 w-3.5" />
                   Nuevo Abono
@@ -1320,9 +1371,9 @@ export function TripDrawer({
               </div>
 
               {payments.length === 0 ? (
-                <p className="text-xs text-text-3 italic p-4 text-center border rounded-lg">
+                <div className="rounded-2xl border-2 border-dashed border-border/80 p-8 text-center text-xs text-text-3 font-medium bg-muted/10">
                   Sin abonos registrados. Haz clic en &ldquo;Nuevo Abono&rdquo; para registrar el primer pago.
-                </p>
+                </div>
               ) : (
                 <div className="space-y-2.5">
                   {payments.map((p) => (
@@ -1385,202 +1436,61 @@ export function TripDrawer({
 
           {/* 3. Pasajeros */}
           {activeTab === "passengers" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <div>
-                  <h3 className="font-bold text-sm text-foreground">
-                    Manifiesto de Pasajeros ({travelers.length})
-                  </h3>
-                  <p className="text-xs text-text-3">
-                    Cupo contratado: {quote.passengers} Adultos {quote.childPassengers > 0 ? `+ ${quote.childPassengers} Niños` : ""}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setEditingTravelerId(null);
-                    setTravelerForm({
-                      firstName: "",
-                      lastName: "",
-                      idType: "CC",
-                      idNumber: "",
-                      type: "ADULTO",
-                      eps: "",
-                      phone: "",
-                      email: "",
-                      originCity: quote.originCity ?? "",
-                      observations: "",
-                    });
-                    setTravelerModalOpen(true);
-                  }}
-                >
-                  <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-                  Agregar Pasajero
-                </Button>
+            <div className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-md space-y-6">
+              {/* Header con icono similar a la referencia */}
+              <div className="flex items-center gap-2.5 text-brand border-b pb-4">
+                <Users className="h-5 w-5" />
+                <h2 className="text-base font-bold text-foreground">Listado de Pasajeros</h2>
               </div>
 
-              {/* Formulario Modal Pasajero */}
-              {travelerModalOpen && (
-                <form
-                  onSubmit={handleSaveTraveler}
-                  className="rounded-xl border bg-muted/20 p-4 space-y-3"
-                >
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <h4 className="text-xs font-bold text-foreground">
-                      {editingTravelerId ? "Editar Pasajero" : "Nuevo Pasajero"}
-                    </h4>
-                    <button
-                      type="button"
-                      onClick={() => setTravelerModalOpen(false)}
-                      className="text-text-3 hover:text-foreground"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+              {/* Sub-barra: Lista de pasajeros y cotizado */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="font-extrabold text-xs uppercase tracking-wider text-foreground">
+                  LISTA DE PASAJEROS ({travelers.length})
+                </h3>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold bg-muted/40 border px-3 py-1 rounded-full">
+                    <span className="text-[10px] font-bold text-text-3 uppercase tracking-wider mr-1">Cotizado:</span>
+                    <span className="text-foreground">{quote.passengers} Adultos</span>
+                    {quote.childPassengers > 0 && (
+                      <span className="text-emerald-600 font-bold ml-1">
+                        {quote.childPassengers} Niño{quote.childPassengers > 1 ? "s" : ""}
+                      </span>
+                    )}
                   </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setEditingTravelerId(null);
+                      setTravelerForm({
+                        firstName: "",
+                        lastName: "",
+                        idType: "CC",
+                        idNumber: "",
+                        type: "ADULTO",
+                        eps: "",
+                        phone: "",
+                        email: "",
+                        originCity: quote.originCity ?? "",
+                        observations: "",
+                      });
+                      setTravelerModalOpen(true);
+                    }}
+                    className="h-8 text-xs bg-slate-700 hover:bg-slate-800 text-white"
+                  >
+                    <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                    Agregar Pasajero
+                  </Button>
+                </div>
+              </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <Input
-                      placeholder="Nombres"
-                      value={travelerForm.firstName ?? ""}
-                      onChange={(e) =>
-                        setTravelerForm((prev) => ({ ...prev, firstName: e.target.value }))
-                      }
-                      required
-                      className="h-8 text-xs"
-                    />
-                    <Input
-                      placeholder="Apellidos"
-                      value={travelerForm.lastName ?? ""}
-                      onChange={(e) =>
-                        setTravelerForm((prev) => ({ ...prev, lastName: e.target.value }))
-                      }
-                      required
-                      className="h-8 text-xs"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <select
-                      value={travelerForm.idType ?? "CC"}
-                      onChange={(e) =>
-                        setTravelerForm((prev) => ({ ...prev, idType: e.target.value }))
-                      }
-                      className="h-8 rounded-md border border-input bg-card px-2 text-xs font-semibold"
-                    >
-                      <option value="CC">Cédula (CC)</option>
-                      <option value="TI">Tarjeta Identidad (TI)</option>
-                      <option value="PP">Pasaporte (PP)</option>
-                      <option value="CE">Cédula Extranjería (CE)</option>
-                      <option value="RC">Registro Civil (RC)</option>
-                    </select>
-
-                    <Input
-                      placeholder="Número documento"
-                      value={travelerForm.idNumber ?? ""}
-                      onChange={(e) =>
-                        setTravelerForm((prev) => ({ ...prev, idNumber: e.target.value }))
-                      }
-                      required
-                      className="h-8 text-xs"
-                    />
-
-                    <select
-                      value={travelerForm.type ?? "ADULTO"}
-                      onChange={(e) =>
-                        setTravelerForm((prev) => ({
-                          ...prev,
-                          type: e.target.value as "ADULTO" | "NIÑO" | "INFANTE",
-                        }))
-                      }
-                      className="h-8 rounded-md border border-input bg-card px-2 text-xs font-semibold"
-                    >
-                      <option value="ADULTO">ADULTO</option>
-                      <option value="NIÑO">NIÑO</option>
-                      <option value="INFANTE">INFANTE</option>
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <Input
-                      type="date"
-                      title="Fecha de nacimiento"
-                      value={travelerForm.birthDate ?? ""}
-                      onChange={(e) =>
-                        setTravelerForm((prev) => ({ ...prev, birthDate: e.target.value }))
-                      }
-                      className="h-8 text-xs"
-                    />
-                    <Input
-                      placeholder="EPS / Seguro médico"
-                      value={travelerForm.eps ?? ""}
-                      onChange={(e) =>
-                        setTravelerForm((prev) => ({ ...prev, eps: e.target.value }))
-                      }
-                      className="h-8 text-xs"
-                    />
-                    <Input
-                      placeholder="Teléfono móvil"
-                      value={travelerForm.phone ?? ""}
-                      onChange={(e) =>
-                        setTravelerForm((prev) => ({ ...prev, phone: e.target.value }))
-                      }
-                      className="h-8 text-xs"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <Input
-                      placeholder="Correo electrónico"
-                      type="email"
-                      value={travelerForm.email ?? ""}
-                      onChange={(e) =>
-                        setTravelerForm((prev) => ({ ...prev, email: e.target.value }))
-                      }
-                      className="h-8 text-xs"
-                    />
-                    <Input
-                      placeholder="Ciudad de origen"
-                      value={travelerForm.originCity ?? ""}
-                      onChange={(e) =>
-                        setTravelerForm((prev) => ({ ...prev, originCity: e.target.value }))
-                      }
-                      className="h-8 text-xs"
-                    />
-                  </div>
-
-                  <Input
-                    placeholder="Observaciones médicas, alergias o restricciones dietarias"
-                    value={travelerForm.observations ?? ""}
-                    onChange={(e) =>
-                      setTravelerForm((prev) => ({ ...prev, observations: e.target.value }))
-                    }
-                    className="h-8 text-xs"
-                  />
-
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setTravelerModalOpen(false)}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button type="submit" size="sm">
-                      Guardar Pasajero
-                    </Button>
-                  </div>
-                </form>
-              )}
-
-              {/* Travelers List */}
+              {/* Travelers List or Empty State */}
               {travelers.length === 0 ? (
-                <p className="text-xs text-text-3 italic p-4 text-center border rounded-lg">
-                  Sin pasajeros registrados. Haz clic en &ldquo;Agregar Pasajero&rdquo; para registrar los viajeros.
-                </p>
+                <div className="rounded-2xl border-2 border-dashed border-border/80 p-10 text-center text-xs text-text-3 font-medium bg-muted/10">
+                  No se han registrado pasajeros en esta reserva.
+                </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {travelers.map((t, idx) => (
                     <div
                       key={t.id}
@@ -1634,19 +1544,56 @@ export function TripDrawer({
                   ))}
                 </div>
               )}
+
+              {/* Tarjeta inferior para registrar nuevo pasajero tal como en la imagen */}
+              <div className="rounded-2xl border border-border/80 bg-muted/15 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-text-2 block">
+                    Registrar Nuevo Pasajero
+                  </span>
+                  <p className="text-xs text-text-3 mt-0.5">
+                    Añade los datos de contacto y documentación de cada viajero para los vouchers y tiquetes.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setEditingTravelerId(null);
+                    setTravelerForm({
+                      firstName: "",
+                      lastName: "",
+                      idType: "CC",
+                      idNumber: "",
+                      type: "ADULTO",
+                      eps: "",
+                      phone: "",
+                      email: "",
+                      originCity: quote.originCity ?? "",
+                      observations: "",
+                    });
+                    setTravelerModalOpen(true);
+                  }}
+                  className="bg-slate-700 hover:bg-slate-800 text-white shrink-0"
+                >
+                  <Plus className="mr-1.5 h-4 w-4" /> Agregar Pasajero
+                </Button>
+              </div>
             </div>
           )}
 
           {/* 4. Pagos a Proveedores (Supplier Payments) */}
           {activeTab === "supplierPayments" && (
-            <div className="space-y-4">
-              <div className="border-b pb-3">
-                <h3 className="font-bold text-sm text-foreground">
-                  Liquidación & Control de Pagos a Proveedores
-                </h3>
-                <p className="text-xs text-text-3">
-                  Control de costos netos por servicio del itinerario y pagos transferidos a mayoristas/operadores.
-                </p>
+            <div className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-md space-y-6">
+              <div className="flex items-center gap-2.5 text-brand border-b pb-4">
+                <Handshake className="h-5 w-5 text-purple-600" />
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-foreground">
+                    Liquidación & Control de Pagos a Proveedores
+                  </h3>
+                  <p className="text-xs text-text-3 mt-0.5">
+                    Control de costos netos por servicio del itinerario y pagos transferidos a mayoristas/operadores.
+                  </p>
+                </div>
               </div>
 
               {/* Métricas Proveedores */}
@@ -1677,104 +1624,13 @@ export function TripDrawer({
                 </div>
               </div>
 
-              {/* Modal Pago a Proveedor */}
-              {supplierPayModalOpen && selectedSupplierItem && (
-                <form
-                  onSubmit={handleConfirmSupplierPayment}
-                  className="rounded-xl border bg-card p-4 space-y-3 shadow-md border-purple-500/30"
-                >
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <Handshake className="h-4 w-4 text-purple-500" />
-                      Registrar Liquidación de Proveedor
-                    </h4>
-                    <button
-                      type="button"
-                      onClick={() => setSupplierPayModalOpen(false)}
-                      className="text-text-3 hover:text-foreground"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <p className="text-xs text-text-2">
-                    Servicio: <strong>{selectedSupplierItem.title}</strong> · Proveedor:{" "}
-                    <strong>{selectedSupplierItem.provider || "Proveedor sin asignar"}</strong> · Costo Neto:{" "}
-                    <strong>{formatCurrency(selectedSupplierItem.netPrice, quote.currency)}</strong>
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-text-2">Fecha de Pago</label>
-                      <Input
-                        type="date"
-                        value={supplierPayDate}
-                        onChange={(e) => setSupplierPayDate(e.target.value)}
-                        required
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-text-2">Método de Transferencia</label>
-                      <select
-                        value={supplierPayMethod}
-                        onChange={(e) => setSupplierPayMethod(e.target.value)}
-                        className="w-full h-8 rounded-md border border-input bg-card px-2 text-xs font-semibold"
-                      >
-                        <option value="Transferencia Bancaria">Transferencia Bancaria</option>
-                        <option value="Tarjeta Corporativa">Tarjeta Corporativa</option>
-                        <option value="Consignación">Consignación</option>
-                        <option value="Efectivo / Caja Menor">Efectivo / Caja Menor</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-text-2">
-                      Comprobante / No. de Aprobación
-                    </label>
-                    <Input
-                      placeholder="Ej. Transferencia #99482 Bancolombia"
-                      value={supplierPayRef}
-                      onChange={(e) => setSupplierPayRef(e.target.value)}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-text-2">Notas internas</label>
-                    <Input
-                      placeholder="Pago neto con retención aplicada..."
-                      value={supplierPayNotes}
-                      onChange={(e) => setSupplierPayNotes(e.target.value)}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSupplierPayModalOpen(false)}
-                      disabled={savingSupplierPay}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button type="submit" size="sm" disabled={savingSupplierPay}>
-                      {savingSupplierPay ? "Guardando..." : "Confirmar Pago a Proveedor"}
-                    </Button>
-                  </div>
-                </form>
-              )}
-
               {/* Lista de Items y Liquidación */}
               {supplierItems.length === 0 ? (
-                <p className="text-xs text-text-3 italic p-4 text-center border rounded-lg">
+                <div className="rounded-2xl border-2 border-dashed border-border/80 p-8 text-center text-xs text-text-3 font-medium bg-muted/10">
                   No hay servicios con costos asociados en el itinerario.
-                </p>
+                </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {supplierItems.map((it) => {
                     const isPaid = it.supplierPaymentStatus === "paid";
                     return (
@@ -1783,7 +1639,7 @@ export function TripDrawer({
                         className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-3.5 text-xs transition ${
                           isPaid
                             ? "bg-emerald-500/5 border-emerald-500/20"
-                            : "bg-card border-border"
+                            : "bg-card border-border/70 shadow-2xs"
                         }`}
                       >
                         <div className="space-y-1">
@@ -1805,7 +1661,7 @@ export function TripDrawer({
                             Proveedor: <strong>{it.provider || "Sin proveedor asignado"}</strong>
                           </p>
                           {isPaid && (
-                            <p className="text-[11px] text-emerald-600">
+                            <p className="text-[11px] text-emerald-600 font-medium">
                               Pagado el {it.supplierPaymentDate} vía {it.supplierPaymentMethod}{" "}
                               {it.supplierPaymentReference ? `(Ref: ${it.supplierPaymentReference})` : ""}
                             </p>
@@ -1860,33 +1716,36 @@ export function TripDrawer({
 
           {/* 5. Operación & Localizadores */}
           {activeTab === "operations" && (
-            <div className="space-y-4">
-              <div className="border-b pb-3">
-                <h3 className="font-bold text-sm text-foreground">
-                  Control de Emisión & Localizadores (PNR)
-                </h3>
-                <p className="text-xs text-text-3">
-                  Asigna y consulta los códigos de confirmación por cada servicio del itinerario.
-                </p>
+            <div className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-md space-y-6">
+              <div className="flex items-center gap-2.5 text-brand border-b pb-4">
+                <Compass className="h-5 w-5 text-indigo-600" />
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-foreground">
+                    Control de Emisión & Localizadores (PNR)
+                  </h3>
+                  <p className="text-xs text-text-3 mt-0.5">
+                    Asigna y consulta los códigos de confirmación por cada servicio del itinerario.
+                  </p>
+                </div>
               </div>
 
               {/* Localizadores por Ítem del Itinerario */}
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-text-2 block">
+              <div className="space-y-2.5">
+                <span className="text-xs font-bold text-text-2 block uppercase tracking-wider">
                   Localizadores / PNRs por Servicio:
                 </span>
                 {allItineraryItems.map((it) => (
                   <div
                     key={it.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-lg border bg-muted/20 p-2.5 text-xs"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border bg-muted/20 p-3 text-xs"
                   >
                     <div className="min-w-0 flex-1">
                       <span className="font-bold text-foreground">
                         Día {it.dayNumber} · [{it.type}] {it.title}
                       </span>
                       {it.provider && (
-                        <span className="text-[11px] text-text-3 block">
-                          Proveedor: {it.provider}
+                        <span className="text-[11px] text-text-3 block mt-0.5">
+                          Proveedor: <strong>{it.provider}</strong>
                         </span>
                       )}
                     </div>
@@ -1899,7 +1758,7 @@ export function TripDrawer({
                             pnr: e.target.value.trim() || undefined,
                           })
                         }
-                        className="h-7 w-44 text-xs font-mono font-bold"
+                        className="h-8 w-48 text-xs font-mono font-bold"
                       />
                     </div>
                   </div>
@@ -1915,7 +1774,7 @@ export function TripDrawer({
                     value={bookingConfirmation}
                     onChange={(e) => setBookingConfirmation(e.target.value)}
                     placeholder="Ej. BK-77492, HOTELES-CARIBE-99"
-                    className="h-8 text-xs font-mono font-bold"
+                    className="h-9 text-xs font-mono font-bold"
                   />
                 </div>
                 <div className="space-y-1">
@@ -1926,7 +1785,7 @@ export function TripDrawer({
                     type="datetime-local"
                     value={pnrExpiration}
                     onChange={(e) => setPnrExpiration(e.target.value)}
-                    className="h-8 text-xs"
+                    className="h-9 text-xs"
                   />
                 </div>
               </div>
@@ -1944,7 +1803,7 @@ export function TripDrawer({
               </div>
 
               <div className="flex justify-end pt-2">
-                <Button onClick={handleSaveOperations} disabled={savingOps}>
+                <Button onClick={handleSaveOperations} disabled={savingOps} className="bg-brand text-brand-fg">
                   {savingOps ? "Guardando…" : "Guardar Operaciones"}
                 </Button>
               </div>
@@ -1953,111 +1812,109 @@ export function TripDrawer({
 
           {/* 6. Vouchers (Resumen limpio y acceso directo a la sección de Vouchers) */}
           {activeTab === "vouchers" && (
-            <div className="mx-auto max-w-3xl space-y-4 py-6">
-              <div className="rounded-lg border bg-card p-6 shadow-xs">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
+            <div className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-md space-y-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-text">
+                    <Ticket className="h-5 w-5" />
+                  </span>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-soft text-brand-text">
-                        <Ticket className="h-4 w-4" />
-                      </span>
-                      <h3 className="text-base font-bold text-foreground">
-                        Voucher de Servicios
-                      </h3>
-                    </div>
-                    <p className="mt-1 text-xs text-text-3">
+                    <h3 className="text-base font-bold text-foreground">
+                      Voucher de Servicios
+                    </h3>
+                    <p className="mt-0.5 text-xs text-text-3">
                       Comprobante oficial de servicios turísticos confirmados para el pasajero y proveedores.
                     </p>
                   </div>
+                </div>
 
-                  {voucher ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-3 py-1 font-mono text-xs font-bold text-success-text">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      {voucher.voucherNumber}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-bold text-text-3">
-                      <AlertCircle className="h-3.5 w-3.5" />
-                      Pendiente de emisión
-                    </span>
+                {voucher ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-3.5 py-1 font-mono text-xs font-bold text-success-text border border-emerald-500/20">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {voucher.voucherNumber}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3.5 py-1 text-xs font-bold text-text-3">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    Pendiente de emisión
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="space-y-2 rounded-xl bg-muted/20 border border-border/70 p-4">
+                  <p className="font-bold text-foreground text-xs uppercase tracking-wider text-text-2">Detalle del viaje amparado</p>
+                  <div className="space-y-1.5 text-text-2">
+                    <p><strong>Destino:</strong> {quote.destination}</p>
+                    <p><strong>Titular:</strong> {quote.clientName}</p>
+                    <p><strong>Fechas:</strong> {quote.startDate ?? "Por definir"} a {quote.endDate ?? "Por definir"}</p>
+                    <p><strong>Pasajeros:</strong> {travelers.length || quote.passengers} pax</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-xl bg-muted/20 border border-border/70 p-4">
+                  <p className="font-bold text-foreground text-xs uppercase tracking-wider text-text-2">Servicios en el voucher</p>
+                  <div className="space-y-1.5 text-text-2">
+                    <p>
+                      <strong>Alojamiento:</strong>{" "}
+                      {voucher?.hotelDetails?.name || (quote.selectedHotelId ? "Hotel seleccionado" : "Por configurar")}
+                    </p>
+                    <p>
+                      <strong>Vuelos:</strong>{" "}
+                      {voucher?.flightDetails?.airline
+                        ? `${voucher.flightDetails.airline} (${voucher.flightDetails.flightNumber ?? "---"})`
+                        : "Por configurar"}
+                    </p>
+                    <p>
+                      <strong>Traslados:</strong>{" "}
+                      {(voucher?.transfers?.length ?? 0) > 0 ? `${voucher?.transfers.length} servicio(s)` : "Ninguno"}
+                    </p>
+                    <p>
+                      <strong>Actividades:</strong>{" "}
+                      {(voucher?.activities?.length ?? 0) > 0 ? `${voucher?.activities.length} tour(s)` : "Ninguna"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  {voucher && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleDownloadVoucherPdf()}
+                        disabled={downloadingVoucherPdf}
+                        className="gap-1.5"
+                      >
+                        {downloadingVoucherPdf ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-brand" />
+                        ) : (
+                          <FileDown className="h-4 w-4" />
+                        )}
+                        <span>Descargar PDF</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCopyVoucherText}
+                        className="gap-1.5"
+                      >
+                        <MessageCircle className="h-4 w-4 text-emerald-600" />
+                        <span>Copiar para WhatsApp</span>
+                      </Button>
+                    </>
                   )}
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div className="space-y-2 rounded-md bg-subtle/50 p-3">
-                    <p className="font-semibold text-foreground">Detalle del viaje amparado</p>
-                    <div className="space-y-1 text-text-2">
-                      <p><strong>Destino:</strong> {quote.destination}</p>
-                      <p><strong>Titular:</strong> {quote.clientName}</p>
-                      <p><strong>Fechas:</strong> {quote.startDate ?? "Por definir"} a {quote.endDate ?? "Por definir"}</p>
-                      <p><strong>Pasajeros:</strong> {travelers.length || quote.passengers} pax</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 rounded-md bg-subtle/50 p-3">
-                    <p className="font-semibold text-foreground">Servicios en el voucher</p>
-                    <div className="space-y-1 text-text-2">
-                      <p>
-                        <strong>Alojamiento:</strong>{" "}
-                        {voucher?.hotelDetails?.name || (quote.selectedHotelId ? "Hotel seleccionado" : "Por configurar")}
-                      </p>
-                      <p>
-                        <strong>Vuelos:</strong>{" "}
-                        {voucher?.flightDetails?.airline
-                          ? `${voucher.flightDetails.airline} (${voucher.flightDetails.flightNumber ?? "---"})`
-                          : "Por configurar"}
-                      </p>
-                      <p>
-                        <strong>Traslados:</strong>{" "}
-                        {(voucher?.transfers?.length ?? 0) > 0 ? `${voucher?.transfers.length} servicio(s)` : "Ninguno"}
-                      </p>
-                      <p>
-                        <strong>Actividades:</strong>{" "}
-                        {(voucher?.activities?.length ?? 0) > 0 ? `${voucher?.activities.length} tour(s)` : "Ninguna"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {voucher && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void handleDownloadVoucherPdf()}
-                          disabled={downloadingVoucherPdf}
-                          className="gap-1.5"
-                        >
-                          {downloadingVoucherPdf ? (
-                            <Loader2 className="h-4 w-4 animate-spin text-brand" />
-                          ) : (
-                            <FileDown className="h-4 w-4" />
-                          )}
-                          <span>Descargar PDF</span>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleCopyVoucherText}
-                          className="gap-1.5"
-                        >
-                          <MessageCircle className="h-4 w-4 text-emerald-600" />
-                          <span>Copiar para WhatsApp</span>
-                        </Button>
-                      </>
-                    )}
-                  </div>
-
-                  <Link
-                    href={`/vouchers?quoteId=${quote.id}`}
-                    className="inline-flex items-center gap-1.5 rounded-sm bg-brand px-4 py-2 text-xs font-semibold text-brand-fg hover:opacity-90 transition-opacity"
-                  >
-                    <span>{voucher ? "Gestionar en sección Vouchers" : "Emitir Voucher en Vouchers"}</span>
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
+                <Link
+                  href={`/vouchers?quoteId=${quote.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-brand-fg hover:opacity-90 transition-opacity"
+                >
+                  <span>{voucher ? "Gestionar en sección Vouchers" : "Emitir Voucher en Vouchers"}</span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
               </div>
             </div>
           )}
@@ -2070,12 +1927,28 @@ export function TripDrawer({
           quoteId={quote.id}
           suggestedAmount={suggestedPaymentAmount}
           currency={quote.currency}
-          installments={quote.amortizationSchedule || []}
+          installments={liveInstallments}
           initialInstallmentId={targetedInstallmentId}
           onClose={() => setPaymentModalOpen(false)}
-          onSaved={() => {
-            void loadPayments();
+          onSaved={async (savedPayment) => {
+            setPayments((prev) => [
+              savedPayment,
+              ...prev.filter((p) => p.id !== savedPayment.id),
+            ]);
             setPaymentModalOpen(false);
+            toast("Abono registrado con éxito", "success");
+            void loadPayments();
+            try {
+              const qRes = await fetch(`/api/travel/quotes/${quote.id}`);
+              if (qRes.ok) {
+                const qData = await qRes.json();
+                if (qData.quote) {
+                  onUpdated(qData.quote);
+                }
+              }
+            } catch (err) {
+              console.error("Error al actualizar cotización tras abono:", err);
+            }
           }}
         />
       )}
@@ -2102,6 +1975,316 @@ export function TripDrawer({
             await handleAddManualInstallment(amount, dueDate);
           }}
         />
+      )}
+
+      {/* Modal Flotante: Agregar / Editar Pasajero */}
+      {travelerModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setTravelerModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-lg rounded-2xl border border-border/80 bg-card p-6 shadow-2xl space-y-5 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
+                  <UserPlus className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-foreground">
+                    {editingTravelerId ? "Editar Datos del Pasajero" : "Registrar Nuevo Pasajero"}
+                  </h3>
+                  <p className="text-xs text-text-3">
+                    Información para vouchers, manifiesto de viaje y tiquetes.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTravelerModalOpen(false)}
+                className="rounded-lg p-1.5 text-text-3 hover:bg-muted hover:text-foreground transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTraveler} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Nombres *</label>
+                  <Input
+                    placeholder="Ej. Juan Andrés"
+                    value={travelerForm.firstName ?? ""}
+                    onChange={(e) =>
+                      setTravelerForm((prev) => ({ ...prev, firstName: e.target.value }))
+                    }
+                    required
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Apellidos *</label>
+                  <Input
+                    placeholder="Ej. Pérez Gómez"
+                    value={travelerForm.lastName ?? ""}
+                    onChange={(e) =>
+                      setTravelerForm((prev) => ({ ...prev, lastName: e.target.value }))
+                    }
+                    required
+                    className="h-9 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Tipo Doc.</label>
+                  <select
+                    value={travelerForm.idType ?? "CC"}
+                    onChange={(e) =>
+                      setTravelerForm((prev) => ({
+                        ...prev,
+                        idType: e.target.value as Traveler["idType"],
+                      }))
+                    }
+                    className="w-full h-9 rounded-md border border-input bg-card px-2.5 text-xs font-medium"
+                  >
+                    <option value="CC">Cédula (CC)</option>
+                    <option value="TI">Tarjeta Id (TI)</option>
+                    <option value="CE">Cédula Ext. (CE)</option>
+                    <option value="PA">Pasaporte (PA)</option>
+                    <option value="RC">Reg. Civil (RC)</option>
+                  </select>
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-xs font-semibold text-text-2">Número de Documento</label>
+                  <Input
+                    placeholder="Ej. 1020304050"
+                    value={travelerForm.idNumber ?? ""}
+                    onChange={(e) =>
+                      setTravelerForm((prev) => ({ ...prev, idNumber: e.target.value }))
+                    }
+                    className="h-9 text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Categoría Pax</label>
+                  <select
+                    value={travelerForm.type ?? "ADULTO"}
+                    onChange={(e) =>
+                      setTravelerForm((prev) => ({
+                        ...prev,
+                        type: e.target.value as Traveler["type"],
+                      }))
+                    }
+                    className="w-full h-9 rounded-md border border-input bg-card px-2.5 text-xs font-medium"
+                  >
+                    <option value="ADULTO">Adulto</option>
+                    <option value="MENOR">Menor</option>
+                    <option value="INFANTE">Infante</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Fecha Nacimiento</label>
+                  <Input
+                    type="date"
+                    value={travelerForm.birthDate ?? ""}
+                    onChange={(e) =>
+                      setTravelerForm((prev) => ({ ...prev, birthDate: e.target.value }))
+                    }
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">EPS / Asistencia</label>
+                  <Input
+                    placeholder="Ej. Sura / Assist Card"
+                    value={travelerForm.eps ?? ""}
+                    onChange={(e) =>
+                      setTravelerForm((prev) => ({ ...prev, eps: e.target.value }))
+                    }
+                    className="h-9 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Teléfono / WhatsApp</label>
+                  <Input
+                    placeholder="Ej. +57 300 123 4567"
+                    value={travelerForm.phone ?? ""}
+                    onChange={(e) =>
+                      setTravelerForm((prev) => ({ ...prev, phone: e.target.value }))
+                    }
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Correo Electrónico</label>
+                  <Input
+                    type="email"
+                    placeholder="ejemplo@correo.com"
+                    value={travelerForm.email ?? ""}
+                    onChange={(e) =>
+                      setTravelerForm((prev) => ({ ...prev, email: e.target.value }))
+                    }
+                    className="h-9 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-text-2">Observaciones / Requerimientos Especiales</label>
+                <Input
+                  placeholder="Ej. Alergias alimentarias, silla de ruedas, asiento pasillo..."
+                  value={travelerForm.observations ?? ""}
+                  onChange={(e) =>
+                    setTravelerForm((prev) => ({ ...prev, observations: e.target.value }))
+                  }
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setTravelerModalOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" className="bg-brand text-brand-fg">
+                  {editingTravelerId ? "Guardar Cambios" : "Agregar Pasajero"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Flotante: Pagar a Proveedor */}
+      {supplierPayModalOpen && selectedSupplierItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setSupplierPayModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-lg rounded-2xl border border-border/80 bg-card p-6 shadow-2xl space-y-5 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600">
+                  <Handshake className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-foreground">
+                    Registrar Liquidación de Proveedor
+                  </h3>
+                  <p className="text-xs text-text-3">
+                    Registra la transferencia o desembolso realizado al operador del servicio.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSupplierPayModalOpen(false)}
+                className="rounded-lg p-1.5 text-text-3 hover:bg-muted hover:text-foreground transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Resumen del servicio */}
+            <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3.5 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-foreground">
+                  {selectedSupplierItem.title}
+                </span>
+                <span className="font-extrabold text-sm text-purple-700">
+                  {formatCurrency(selectedSupplierItem.netPrice || 0, quote.currency)}
+                </span>
+              </div>
+              <p className="text-text-3">
+                Proveedor: <strong>{selectedSupplierItem.provider || "Proveedor sin asignar"}</strong>
+              </p>
+            </div>
+
+            <form onSubmit={handleConfirmSupplierPayment} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Fecha de Pago *</label>
+                  <Input
+                    type="date"
+                    value={supplierPayDate}
+                    onChange={(e) => setSupplierPayDate(e.target.value)}
+                    required
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-2">Método de Transferencia *</label>
+                  <select
+                    value={supplierPayMethod}
+                    onChange={(e) => setSupplierPayMethod(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-card px-2.5 text-xs font-medium"
+                  >
+                    <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+                    <option value="Tarjeta Corporativa">Tarjeta Corporativa</option>
+                    <option value="Consignación">Consignación</option>
+                    <option value="Efectivo / Caja Menor">Efectivo / Caja Menor</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-text-2">
+                  Comprobante / No. de Aprobación
+                </label>
+                <Input
+                  placeholder="Ej. Transferencia #99482 Bancolombia"
+                  value={supplierPayRef}
+                  onChange={(e) => setSupplierPayRef(e.target.value)}
+                  className="h-9 text-xs font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-text-2">Notas internas / Concepto</label>
+                <Input
+                  placeholder="Ej. Pago neto con retención aplicada..."
+                  value={supplierPayNotes}
+                  onChange={(e) => setSupplierPayNotes(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSupplierPayModalOpen(false)}
+                  disabled={savingSupplierPay}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={savingSupplierPay}
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  {savingSupplierPay ? "Guardando..." : "Confirmar Pago a Proveedor"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Diálogo de Confirmación Reutilizable */}

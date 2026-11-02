@@ -182,12 +182,23 @@ export async function createPayment(input: {
       organizationId: input.organizationId,
       quoteId: input.quoteId,
     });
-    const totalPaid = allPayments.reduce((sum, p) => sum + p.amount, 0);
+    const paidMap: Record<string, number> = {};
+    let unassignedAmount = 0;
+    for (const p of allPayments) {
+      if (
+        p.installmentId &&
+        quote.amortizationSchedule.some((inst) => inst.id === p.installmentId)
+      ) {
+        paidMap[p.installmentId] = (paidMap[p.installmentId] || 0) + p.amount;
+      } else {
+        unassignedAmount += p.amount;
+      }
+    }
 
     const { updatedInstallments } = distributePaymentToInstallments(
       quote.amortizationSchedule,
-      {},
-      totalPaid
+      paidMap,
+      unassignedAmount
     );
 
     await db
@@ -262,11 +273,23 @@ export async function deletePayment(input: {
         organizationId: input.organizationId,
         quoteId: payment.quoteId,
       });
-      const totalPaid = remainingPayments.reduce((sum, p) => sum + p.amount, 0);
+      const paidMap: Record<string, number> = {};
+      let unassignedAmount = 0;
+      for (const p of remainingPayments) {
+        if (
+          p.installmentId &&
+          quote.amortizationSchedule.some((inst) => inst.id === p.installmentId)
+        ) {
+          paidMap[p.installmentId] = (paidMap[p.installmentId] || 0) + p.amount;
+        } else {
+          unassignedAmount += p.amount;
+        }
+      }
+
       const { updatedInstallments } = distributePaymentToInstallments(
         quote.amortizationSchedule,
-        {},
-        totalPaid
+        paidMap,
+        unassignedAmount
       );
 
       await db
