@@ -401,7 +401,6 @@ export function SupplierListClient() {
               return [saved, ...prev];
             });
             setModalSupplier(undefined);
-            toast("Proveedor guardado con éxito", "success");
           }}
         />
       )}

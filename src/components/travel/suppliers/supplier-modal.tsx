@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Star, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/toast";
 import type {
   TravelSupplier,
   TravelSupplierHotelMeta,
@@ -35,6 +37,13 @@ export function SupplierModal({
   onClose: () => void;
   onSaved: (supplier: TravelSupplier) => void;
 }) {
+  const { toast } = useToast();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const isEditing = !!supplier;
 
   const [name, setName] = useState(supplier?.name ?? defaultName ?? "");
@@ -67,8 +76,11 @@ export function SupplierModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(e?: React.FormEvent) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!name.trim()) {
       setError("El nombre del proveedor es obligatorio");
       return;
@@ -85,22 +97,31 @@ export function SupplierModal({
     const hotelMeta: TravelSupplierHotelMeta | null =
       type === "hotel"
         ? {
-            checkInTime: checkIn || undefined,
-            checkOutTime: checkOut || undefined,
-            hotelAddress: address || undefined,
-            hotelPhone: hotelPhone || undefined,
-            hotelPolicies: hotelPolicies || undefined,
+            checkInTime: checkIn.trim() || undefined,
+            checkOutTime: checkOut.trim() || undefined,
+            hotelAddress: address.trim() || undefined,
+            hotelPhone: hotelPhone.trim() || undefined,
+            hotelPolicies: hotelPolicies.trim() || undefined,
+          }
+        : null;
+
+    const contactNameVal = contactName.trim();
+    const contactEmailVal = contactEmail.trim();
+    const contactPhoneVal = contactPhone.trim();
+
+    const contact =
+      contactNameVal || contactEmailVal || contactPhoneVal
+        ? {
+            name: contactNameVal || undefined,
+            email: contactEmailVal || undefined,
+            phone: contactPhoneVal || undefined,
           }
         : null;
 
     const payload = {
       name: name.trim(),
       type,
-      contact: {
-        name: contactName.trim() || undefined,
-        email: contactEmail.trim() || undefined,
-        phone: contactPhone.trim() || undefined,
-      },
+      contact,
       commission: commission === "" ? null : Number(commission),
       sla: sla.trim() || null,
       rating,
@@ -128,19 +149,32 @@ export function SupplierModal({
       }
 
       const data = (await res.json()) as { supplier: TravelSupplier };
+      toast(
+        isEditing
+          ? "Proveedor actualizado con éxito"
+          : `Proveedor "${data.supplier.name}" creado con éxito`,
+        "success"
+      );
       onSaved(data.supplier);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Error inesperado");
+      const msg = err instanceof Error ? err.message : "Error inesperado";
+      setError(msg);
+      toast(msg, "error");
     } finally {
       setSaving(false);
     }
   }
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
     >
       <div
         role="dialog"
@@ -156,14 +190,25 @@ export function SupplierModal({
             </h3>
           </div>
           <button
-            onClick={onClose}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             className="rounded p-1 text-text-3 hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void handleSubmit(e);
+          }}
+          className="flex-1 overflow-y-auto p-5 space-y-4"
+        >
           {error && (
             <div className="rounded-md border border-danger-soft bg-danger-tint p-3 text-xs text-danger-text">
               {error}
@@ -362,15 +407,28 @@ export function SupplierModal({
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
+              disabled={saving}
+            >
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button
+              type="submit"
+              onClick={(e) => e.stopPropagation()}
+              disabled={saving}
+            >
               {saving ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear proveedor"}
             </Button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -89,7 +89,11 @@ export function SupplierCombobox({
           variant="outline"
           className="px-2 shrink-0"
           title="Crear nuevo proveedor"
-          onClick={() => setModalOpen(true)}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setModalOpen(true);
+          }}
         >
           <Plus className="h-4 w-4" />
         </Button>
@@ -109,7 +113,9 @@ export function SupplierCombobox({
                 <button
                   type="button"
                   className="mt-1 block w-full text-brand hover:underline font-medium"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     setOpen(false);
                     setModalOpen(true);
                   }}
@@ -154,9 +160,10 @@ export function SupplierCombobox({
           defaultName={search.trim() || undefined}
           onClose={() => setModalOpen(false)}
           onSaved={(newSup) => {
-            setSuppliers((prev) => [newSup, ...prev]);
+            setSuppliers((prev) => [newSup, ...prev.filter((s) => s.id !== newSup.id)]);
             setSearch(newSup.name);
             onChange(newSup.name, newSup);
+            setModalOpen(false);
           }}
         />
       )}
