@@ -930,9 +930,9 @@ export function TripDrawer({
         </header>
 
         {/* Contenedor con Scroll Unificado para Resumen y Pestañas */}
-        <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {/* Sección de Resumen (Expandible / Colapsable) */}
-          <div className="border-b bg-muted/20 p-4 sm:p-5 space-y-3 shrink-0">
+          <div className="border-b bg-muted/20 p-4 sm:p-5 space-y-3">
             {/* Barra compacta cuando la sección está colapsada */}
             {!showOverview && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-2.5 px-3.5 text-xs shadow-2xs">
@@ -1119,37 +1119,39 @@ export function TripDrawer({
           </div>
 
           {/* Navigation Tabs (Sticky en el top del scroll) */}
-          <div className="sticky top-0 z-20 flex border-b bg-card/95 backdrop-blur-xs px-5 gap-1 overflow-x-auto shadow-2xs">
-            {[
-              { id: "amortization", label: "Amortización", icon: Calendar },
-              { id: "payments", label: `Abonos (${payments.length})`, icon: DollarSign },
-              { id: "passengers", label: `Pasajeros (${travelers.length})`, icon: Users },
-              { id: "supplierPayments", label: `Proveedores (${supplierItems.length})`, icon: Handshake },
-              { id: "operations", label: "Operación", icon: Plane },
-              { id: "vouchers", label: "Voucher", icon: Ticket },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isSelected = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                  className={`flex items-center gap-1.5 border-b-2 py-3 px-3 text-xs font-semibold transition shrink-0 ${
-                    isSelected
-                      ? "border-brand text-brand"
-                      : "border-transparent text-text-3 hover:text-foreground"
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                </button>
-              );
-            })}
+          <div className="sticky top-0 z-30 bg-card border-b shadow-xs">
+            <div className="flex items-center justify-between sm:justify-start px-2 sm:px-4 gap-1 overflow-x-auto">
+              {[
+                { id: "amortization", label: "Amortización", icon: Calendar },
+                { id: "payments", label: `Abonos (${payments.length})`, icon: DollarSign },
+                { id: "passengers", label: `Pasajeros (${travelers.length})`, icon: Users },
+                { id: "supplierPayments", label: `Proveedores (${supplierItems.length})`, icon: Handshake },
+                { id: "operations", label: "Operación", icon: Plane },
+                { id: "vouchers", label: "Voucher", icon: Ticket },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isSelected = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                    className={`flex items-center gap-1.5 border-b-2 py-2.5 px-2.5 sm:px-3.5 text-xs font-semibold transition shrink-0 whitespace-nowrap ${
+                      isSelected
+                        ? "border-brand text-brand"
+                        : "border-transparent text-text-3 hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Tab Content */}
-          <div className="p-5 space-y-4 flex-1">
+          <div className="p-4 sm:p-5 space-y-4">
           {/* 1. Amortización */}
           {activeTab === "amortization" && (
             <div className="space-y-4">
