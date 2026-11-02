@@ -46,7 +46,7 @@ export const POST = withAuth(async (session, req: Request, ctx: RouteContext) =>
   } catch (err) {
     console.error("[vouchers] error al guardar voucher:", err);
     return apiError(
-      500,
+      400,
       "voucher_error",
       err instanceof Error ? err.message : "Error al guardar voucher"
     );

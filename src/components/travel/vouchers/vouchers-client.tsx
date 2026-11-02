@@ -21,16 +21,18 @@ import {
   ArrowLeft,
   ChevronDown,
   Loader2,
+  Lock,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/travel/pricing";
 import { downloadVoucherPdf } from "@/components/travel/pdf/generator";
 import { VoucherEditorPanel } from "@/components/travel/trips/voucher-editor-panel";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
-import type { TravelVoucherDto, VoucherListItemDto } from "@/server/travel/trips";
+import type { TravelPaymentDto, TravelVoucherDto, VoucherListItemDto } from "@/server/travel/trips";
 
 export function VouchersClient() {
   const searchParams = useSearchParams();
@@ -52,6 +54,11 @@ export function VouchersClient() {
   const [activeQuoteId, setActiveQuoteId] = useState<string | null>(initialQuoteId);
   const [activeQuote, setActiveQuote] = useState<TravelQuoteDto | null>(null);
   const [activeVoucher, setActiveVoucher] = useState<TravelVoucherDto | null>(null);
+  const [activePaymentInfo, setActivePaymentInfo] = useState<{
+    isFullyPaid: boolean;
+    balanceRemaining: number;
+    totalPaid: number;
+  } | null>(null);
   const [loadingEditor, setLoadingEditor] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [openPdfDropdownId, setOpenPdfDropdownId] = useState<string | null>(null);
@@ -85,14 +92,15 @@ export function VouchersClient() {
     void fetchVouchers();
   }, [fetchVouchers]);
 
-  // Cargar cotización y voucher para el modo editor
+  // Cargar cotización, voucher y abonos para el modo editor
   const loadEditorData = useCallback(
     async (quoteId: string) => {
       try {
         setLoadingEditor(true);
-        const [quoteRes, voucherRes] = await Promise.all([
+        const [quoteRes, voucherRes, paymentsRes] = await Promise.all([
           fetch(`/api/travel/quotes/${quoteId}`),
           fetch(`/api/travel/vouchers/${quoteId}`),
+          fetch(`/api/travel/payments?quoteId=${quoteId}`),
         ]);
 
         if (!quoteRes.ok) throw new Error("Error al cargar la reserva");
@@ -100,9 +108,18 @@ export function VouchersClient() {
         const voucherData = voucherRes.ok
           ? ((await voucherRes.json()) as { voucher: TravelVoucherDto | null })
           : { voucher: null };
+        const paymentsData = paymentsRes.ok
+          ? ((await paymentsRes.json()) as { payments: TravelPaymentDto[] })
+          : { payments: [] };
+
+        const totalPaid = (paymentsData.payments || []).reduce((sum, p) => sum + p.amount, 0);
+        const finalTotal = quoteData.quote.totals?.finalTotal || 0;
+        const balanceRemaining = Math.max(0, finalTotal - totalPaid);
+        const isFullyPaid = finalTotal > 0 ? balanceRemaining <= 0.01 : false;
 
         setActiveQuote(quoteData.quote);
         setActiveVoucher(voucherData.voucher);
+        setActivePaymentInfo({ isFullyPaid, balanceRemaining, totalPaid });
       } catch (err) {
         console.error(err);
         toast("No se pudo cargar la información para editar el voucher", "error");
@@ -120,6 +137,7 @@ export function VouchersClient() {
     } else {
       setActiveQuote(null);
       setActiveVoucher(null);
+      setActivePaymentInfo(null);
     }
   }, [activeQuoteId, loadEditorData]);
 
@@ -128,7 +146,7 @@ export function VouchersClient() {
     const q = query.trim().toLowerCase();
     return items.filter((item) => {
       if (statusFilter === "issued" && !item.hasVoucher) return false;
-      if (statusFilter === "pending" && item.hasVoucher) return false;
+      if (statusFilter === "pending" && (item.hasVoucher || !item.isFullyPaid)) return false;
 
       if (!q) return true;
 
@@ -263,6 +281,8 @@ export function VouchersClient() {
               <VoucherEditorPanel
                 quote={activeQuote}
                 initialVoucher={activeVoucher}
+                isFullyPaid={activePaymentInfo?.isFullyPaid}
+                balanceRemaining={activePaymentInfo?.balanceRemaining}
                 onSaved={(savedVoucher) => {
                   setActiveVoucher(savedVoucher);
                   toast("Voucher guardado con éxito", "success");
@@ -289,6 +309,9 @@ export function VouchersClient() {
                       passengers: activeQuote.passengers,
                       childPassengers: activeQuote.childPassengers,
                       totalPrice: activeQuote.totals?.finalTotal ?? 0,
+                      totalPaid: activePaymentInfo?.totalPaid ?? 0,
+                      balanceRemaining: activePaymentInfo?.balanceRemaining ?? 0,
+                      isFullyPaid: activePaymentInfo?.isFullyPaid ?? false,
                       currency: activeQuote.currency,
                       status: activeQuote.bookingStatus ?? activeQuote.status,
                       hasVoucher: Boolean(activeVoucher),
@@ -474,10 +497,15 @@ export function VouchersClient() {
                           <Ticket className="h-3.5 w-3.5" />
                           {item.voucher?.voucherNumber}
                         </span>
+                      ) : item.isFullyPaid ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-xs font-bold text-blue-600">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Listo para emitir (100% Pagado)
+                        </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded bg-secondary px-2 py-0.5 text-xs font-bold text-text-3">
+                        <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-xs font-bold text-amber-600">
                           <AlertCircle className="h-3.5 w-3.5" />
-                          Pendiente de emisión
+                          Requiere Pago Total (Pendiente: {formatCurrency(item.balanceRemaining, item.currency)})
                         </span>
                       )}
 
@@ -638,17 +666,29 @@ export function VouchersClient() {
                     )}
 
                     {/* Botón Principal: Gestionar / Emitir */}
-                    <Button
-                      size="sm"
-                      onClick={() => setActiveQuoteId(item.quoteId)}
-                      className={cn(
-                        "gap-1.5",
-                        !item.hasVoucher && "bg-brand text-brand-fg hover:opacity-90"
-                      )}
-                    >
-                      <Ticket className="h-4 w-4" />
-                      <span>{item.hasVoucher ? "Editar Voucher" : "Emitir Voucher"}</span>
-                    </Button>
+                    {item.isFullyPaid ? (
+                      <Button
+                        size="sm"
+                        onClick={() => setActiveQuoteId(item.quoteId)}
+                        className={cn(
+                          "gap-1.5",
+                          !item.hasVoucher && "bg-brand text-brand-fg hover:opacity-90"
+                        )}
+                      >
+                        <Ticket className="h-4 w-4" />
+                        <span>{item.hasVoucher ? "Editar Voucher" : "Emitir Voucher"}</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        disabled
+                        className="gap-1.5 bg-muted text-text-3 border border-border/80 cursor-not-allowed opacity-75"
+                        title={`Reserva con saldo pendiente de ${formatCurrency(item.balanceRemaining, item.currency)}. Los vouchers solo se pueden gestionar una vez la reserva se ha pagado en su totalidad.`}
+                      >
+                        <Lock className="h-3.5 w-3.5 text-amber-500" />
+                        <span>Bloqueado (Saldo pendiente)</span>
+                      </Button>
+                    )}
 
                     {/* Enlace al Viaje */}
                     <Link

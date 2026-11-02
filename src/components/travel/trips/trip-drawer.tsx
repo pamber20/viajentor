@@ -17,6 +17,7 @@ import {
   FileDown,
   Handshake,
   Loader2,
+  Lock,
   MapPin,
   Maximize2,
   MessageCircle,
@@ -201,6 +202,7 @@ export function TripDrawer({
 
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
   const balanceRemaining = Math.max(0, quote.totals.finalTotal - totalPaid);
+  const isFullyPaid = quote.totals.finalTotal > 0 ? balanceRemaining <= 0.01 : false;
   const percentagePaid =
     quote.totals.finalTotal > 0
       ? Math.min(100, Math.round((totalPaid / quote.totals.finalTotal) * 100))
@@ -1833,13 +1835,33 @@ export function TripDrawer({
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     {voucher.voucherNumber}
                   </span>
+                ) : isFullyPaid ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 px-3.5 py-1 text-xs font-bold text-blue-600">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Listo para emisión (100% Pagado)
+                  </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3.5 py-1 text-xs font-bold text-text-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 px-3.5 py-1 text-xs font-bold text-amber-600">
                     <AlertCircle className="h-3.5 w-3.5" />
-                    Pendiente de emisión
+                    Requiere Pago Total (Pendiente {formatCurrency(balanceRemaining, quote.currency)})
                   </span>
                 )}
               </div>
+
+              {!isFullyPaid && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-900 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-amber-950">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>Gestión de Vouchers Bloqueada</span>
+                  </div>
+                  <p>
+                    Los vouchers oficiales de servicios solo se pueden gestionar y emitir una vez la reserva haya sido pagada en su totalidad por el cliente.
+                  </p>
+                  <p className="font-semibold text-amber-950">
+                    Total Pagado: {formatCurrency(totalPaid, quote.currency)} de {formatCurrency(quote.totals.finalTotal, quote.currency)} · Saldo Pendiente: {formatCurrency(balanceRemaining, quote.currency)}
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div className="space-y-2 rounded-xl bg-muted/20 border border-border/70 p-4">
@@ -1879,7 +1901,7 @@ export function TripDrawer({
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  {voucher && (
+                  {voucher && isFullyPaid && (
                     <>
                       <Button
                         variant="outline"
@@ -1908,13 +1930,34 @@ export function TripDrawer({
                   )}
                 </div>
 
-                <Link
-                  href={`/vouchers?quoteId=${quote.id}`}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-brand-fg hover:opacity-90 transition-opacity"
-                >
-                  <span>{voucher ? "Gestionar en sección Vouchers" : "Emitir Voucher en Vouchers"}</span>
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
+                {isFullyPaid ? (
+                  <Link
+                    href={`/vouchers?quoteId=${quote.id}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-brand-fg hover:opacity-90 transition-opacity"
+                  >
+                    <span>{voucher ? "Gestionar en sección Vouchers" : "Emitir Voucher en Vouchers"}</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-4 py-2 text-xs font-semibold text-text-3 cursor-not-allowed border border-border/80"
+                      title="Para gestionar o emitir el voucher, la reserva debe estar pagada en su totalidad."
+                    >
+                      <Lock className="h-3.5 w-3.5 text-amber-500" />
+                      <span>{voucher ? "Gestión bloqueada (Saldo pendiente)" : "Emisión bloqueada (Saldo pendiente)"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("amortization")}
+                      className="text-xs font-bold text-brand hover:underline"
+                    >
+                      Ir a registrar abono →
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -2,7 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
-import { distributePaymentToInstallments } from "@/lib/travel/pricing";
+import { distributePaymentToInstallments, formatCurrency } from "@/lib/travel/pricing";
 import type {
   ActivityDetail,
   TransferDetail,
@@ -391,6 +391,37 @@ export type UpsertVoucherInput = {
 
 export async function upsertVoucher(input: UpsertVoucherInput): Promise<TravelVoucherDto> {
   const db = getDb();
+
+  // Validación: Los vouchers solo se pueden gestionar una vez la reserva se ha pagado en su totalidad
+  const [quoteRecord] = await db
+    .select()
+    .from(schema.travelQuote)
+    .where(
+      scoped(
+        schema.travelQuote.organizationId,
+        input.organizationId,
+        eq(schema.travelQuote.id, input.quoteId)
+      )
+    );
+
+  if (!quoteRecord) {
+    throw new Error("Reserva no encontrada");
+  }
+
+  const quote = serializeQuote(quoteRecord);
+  const payments = await listPayments({
+    organizationId: input.organizationId,
+    quoteId: input.quoteId,
+  });
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  const balanceRemaining = Math.max(0, quote.totals.finalTotal - totalPaid);
+
+  if (quote.totals.finalTotal > 0 && balanceRemaining > 0.01) {
+    throw new Error(
+      `No se puede gestionar ni emitir el voucher: la reserva tiene un saldo pendiente de ${formatCurrency(balanceRemaining, quote.currency)}. Los vouchers solo se pueden gestionar una vez la reserva se ha pagado en su totalidad por el cliente.`
+    );
+  }
+
   const existing = await getVoucher({
     organizationId: input.organizationId,
     quoteId: input.quoteId,
@@ -498,6 +529,9 @@ export interface VoucherListItemDto {
   passengers: number;
   childPassengers: number;
   totalPrice: number;
+  totalPaid: number;
+  balanceRemaining: number;
+  isFullyPaid: boolean;
   currency: string;
   status: string;
   hasVoucher: boolean;
@@ -544,6 +578,17 @@ export async function listVouchers(organizationId: string): Promise<{
     voucherMap.set(v.quoteId, v);
   }
 
+  // Obtenemos todos los abonos/pagos de la organización para calcular saldos reales
+  const payments = await db
+    .select()
+    .from(schema.travelPayment)
+    .where(scoped(schema.travelPayment.organizationId, organizationId));
+
+  const paymentMap = new Map<string, number>();
+  for (const p of payments) {
+    paymentMap.set(p.quoteId, (paymentMap.get(p.quoteId) || 0) + p.amount);
+  }
+
   const now = new Date();
   const next15Days = new Date();
   next15Days.setDate(next15Days.getDate() + 15);
@@ -557,9 +602,14 @@ export async function listVouchers(organizationId: string): Promise<{
     const rawV = voucherMap.get(q.id);
     const hasVoucher = Boolean(rawV);
 
+    const totalPaid = paymentMap.get(q.id) || 0;
+    const balanceRemaining = Math.max(0, q.totals.finalTotal - totalPaid);
+    const isFullyPaid = q.totals.finalTotal > 0 ? balanceRemaining <= 0.01 : false;
+
     if (hasVoucher) {
       totalIssued++;
-    } else {
+    } else if (isFullyPaid) {
+      // Solo se contabilizan como pendientes de emisión aquellas reservas ya pagadas al 100%
       pendingVouchers++;
     }
 
@@ -624,6 +674,9 @@ export async function listVouchers(organizationId: string): Promise<{
       passengers: q.passengers,
       childPassengers: q.childPassengers,
       totalPrice: q.totals.finalTotal,
+      totalPaid,
+      balanceRemaining,
+      isFullyPaid,
       currency: q.currency,
       status: q.bookingStatus ?? q.status,
       hasVoucher,

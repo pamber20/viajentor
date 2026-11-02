@@ -14,6 +14,8 @@ import {
   FileDown,
   Copy,
   CheckCircle2,
+  AlertCircle,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +35,8 @@ interface VoucherEditorPanelProps {
   onDownloadPdf?: () => void;
   isDownloadingPdf?: boolean;
   onCopyWhatsApp?: () => void;
+  isFullyPaid?: boolean;
+  balanceRemaining?: number;
 }
 
 export function VoucherEditorPanel({
@@ -42,6 +46,8 @@ export function VoucherEditorPanel({
   onDownloadPdf,
   isDownloadingPdf = false,
   onCopyWhatsApp,
+  isFullyPaid,
+  balanceRemaining,
 }: VoucherEditorPanelProps) {
   const [activeTab, setActiveTab] = useState<
     "flight" | "hotel" | "transfers" | "activities" | "checklist"
@@ -403,13 +409,23 @@ export function VoucherEditorPanel({
             type="button"
             size="sm"
             onClick={() => void handleSave()}
-            disabled={saving}
-            className="h-8 text-xs font-bold gap-1.5 bg-brand text-brand-foreground hover:bg-brand-hover shadow-sm"
+            disabled={saving || isFullyPaid === false}
+            title={isFullyPaid === false ? "Requiere 100% de pago para guardar o emitir el voucher" : undefined}
+            className={`h-8 text-xs font-bold gap-1.5 shadow-sm ${
+              isFullyPaid === false
+                ? "bg-muted text-text-3 border border-border/80 cursor-not-allowed opacity-75"
+                : "bg-brand text-brand-foreground hover:bg-brand-hover"
+            }`}
           >
             {saving ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 Guardando…
+              </>
+            ) : isFullyPaid === false ? (
+              <>
+                <Lock className="w-3.5 h-3.5 text-amber-500" />
+                Guardar Bloqueado
               </>
             ) : saveSuccess ? (
               <>
@@ -425,6 +441,25 @@ export function VoucherEditorPanel({
           </Button>
         </div>
       </div>
+
+      {isFullyPaid === false && (
+        <div className="p-3.5 text-xs rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex items-start gap-2.5">
+          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-bold text-amber-950 block">
+              Gestión de Voucher Bloqueada
+            </span>
+            <p>
+              Los vouchers de servicios solo se pueden gestionar y emitir una vez la reserva haya sido pagada en su totalidad por el cliente.
+            </p>
+            {balanceRemaining !== undefined && balanceRemaining > 0 && (
+              <p className="font-semibold text-amber-950">
+                Saldo pendiente de pago: {quote.currency} {balanceRemaining.toLocaleString("es-CO")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {errorMessage && (
         <div className="p-3 text-xs rounded-xl bg-danger-tint border border-danger-soft text-danger-text">
