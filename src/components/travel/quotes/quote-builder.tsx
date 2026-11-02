@@ -1273,7 +1273,7 @@ export function QuoteBuilder({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-6">
+        <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-6 bg-muted/15">
           {error && (
             <div className="rounded-md border border-danger-soft bg-danger-tint p-3 text-xs text-danger-text">
               {error}
@@ -1281,7 +1281,7 @@ export function QuoteBuilder({
           )}
 
           {/* Paso 1: Información del Cliente */}
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card shadow-md overflow-hidden transition-shadow">
             <button
               type="button"
               onClick={() => setShowClient(!showClient)}
@@ -1473,7 +1473,7 @@ export function QuoteBuilder({
           </div>
 
           {/* Paso 2: Destinos, Aeropuertos y Fechas */}
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card shadow-md overflow-hidden transition-shadow">
             <button
               type="button"
               onClick={() => setShowTrip(!showTrip)}
@@ -1777,7 +1777,7 @@ export function QuoteBuilder({
           </div>
 
           {/* Paso 3: Preferencias del Viaje */}
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card shadow-md overflow-hidden transition-shadow">
             <button
               type="button"
               onClick={() => setShowPreferences(!showPreferences)}
@@ -1823,7 +1823,7 @@ export function QuoteBuilder({
           </div>
 
           {/* Paso 4: Servicios del Itinerario */}
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card shadow-md overflow-hidden transition-shadow">
             <div className="px-4 py-3 flex items-center justify-between border-b bg-muted/20">
               <button
                 type="button"
@@ -2372,7 +2372,7 @@ export function QuoteBuilder({
           </div>
 
           {/* Paso 5: Configuración Financiera y Plan de Pagos */}
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card shadow-md overflow-hidden transition-shadow">
             <button
               type="button"
               onClick={() => setShowFinancial(!showFinancial)}
@@ -2810,7 +2810,7 @@ export function QuoteBuilder({
           </div>
 
           {/* Paso 6: Inclusiones, Exclusiones y Políticas */}
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card shadow-md overflow-hidden transition-shadow">
             <button
               type="button"
               onClick={() => setShowInclusions(!showInclusions)}

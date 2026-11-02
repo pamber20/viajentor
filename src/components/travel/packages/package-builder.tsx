@@ -897,7 +897,7 @@ export function PackageBuilder({
       </div>
 
       {/* Main Body */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6 bg-muted/10">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6 bg-muted/15">
         <form
           id="package-form"
           onSubmit={handleSavePackage}
@@ -913,7 +913,7 @@ export function PackageBuilder({
           )}
 
           {/* Encabezado: Título Comercial y Estado */}
-          <div className="rounded-xl border bg-card p-4 sm:p-5 shadow-xs space-y-3">
+          <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-md space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div className="space-y-1 sm:col-span-3">
                 <label className="text-xs font-semibold text-text-2">
@@ -956,7 +956,7 @@ export function PackageBuilder({
           </div>
 
           {/* Paso 2: Destinos, Aeropuertos y Fechas (Copia Exacta de Cotizaciones) */}
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card shadow-md overflow-hidden transition-shadow">
             <button
               type="button"
               onClick={() => setShowTrip(!showTrip)}
@@ -1266,7 +1266,7 @@ export function PackageBuilder({
           </div>
 
           {/* Paso 4: Servicios del Itinerario con Multicotización y Tarifas Adulto/Niño */}
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card shadow-md overflow-hidden transition-shadow">
             <div className="px-4 py-3 flex items-center justify-between border-b bg-muted/20">
               <button
                 type="button"
@@ -1788,7 +1788,7 @@ export function PackageBuilder({
           </div>
 
           {/* Paso 5: Configuración Financiera y Plan de Pagos (Copia Exacta de Cotizaciones) */}
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card shadow-md overflow-hidden transition-shadow">
             <button
               type="button"
               onClick={() => setShowFinancial(!showFinancial)}
@@ -2197,7 +2197,7 @@ export function PackageBuilder({
           </div>
 
           {/* Paso 6: Inclusiones, Exclusiones y Políticas (Copia Exacta de Cotizaciones) */}
-          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card shadow-md overflow-hidden transition-shadow">
             <button
               type="button"
               onClick={() => setShowInclusions(!showInclusions)}
