@@ -290,8 +290,14 @@ export function AiClient() {
                 id="ai-provider"
                 value={provider}
                 onChange={(e) => {
-                  setProvider(e.target.value as AiProviderId);
+                  const newProvider = e.target.value as AiProviderId;
+                  setProvider(newProvider);
                   setModelos(null);
+                  if (newProvider === "deepseek" && (!model || model.includes("/"))) {
+                    setModel("deepseek-chat");
+                  } else if (newProvider === "openrouter" && (!model || !model.includes("/"))) {
+                    setModel("anthropic/claude-sonnet-4.5");
+                  }
                 }}
                 className="h-9 w-full rounded-md border border-input bg-card px-2 text-sm"
               >
@@ -303,7 +309,7 @@ export function AiClient() {
               </select>
               <p className="text-xs text-muted-foreground">
                 {preset.baseUrl
-                  ? `Habla con ${preset.baseUrl}. Una sola llave da acceso a los modelos de todos los laboratorios.`
+                  ? `Habla con ${preset.baseUrl}.`
                   : "Cualquier API con la forma de la de OpenAI: OpenAI, Groq, Together, un servidor propio…"}
               </p>
             </div>
@@ -486,6 +492,26 @@ function AyudaLlave({ provider }: { provider: AiProviderId }) {
             → Create key y copia la llave.
           </li>
           <li>Pégala aquí, pulsa «Probar conexión» y luego «Guardar».</li>
+        </ol>
+      ) : provider === "deepseek" ? (
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-muted-foreground">
+          <li>
+            Inicia sesión o crea una cuenta en{" "}
+            <a className="underline" href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer">
+              platform.deepseek.com
+            </a>
+            .
+          </li>
+          <li>
+            En la sección <strong>API Keys</strong>, genera una nueva clave secreta (empieza por <code className="font-mono">sk-…</code>).
+          </li>
+          <li>
+            Asegúrate de contar con saldo en tu cuenta (Top up).
+          </li>
+          <li>
+            Pega aquí la llave, el modelo recomendado es <code className="font-mono">deepseek-chat</code> (V3) o <code className="font-mono">deepseek-reasoner</code> (R1).
+          </li>
+          <li>Pulsa «Probar conexión» y luego «Guardar cambios».</li>
         </ol>
       ) : (
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-muted-foreground">
