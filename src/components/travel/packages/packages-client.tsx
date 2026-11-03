@@ -170,8 +170,9 @@ export function PackagesClient() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
+    <div className="flex h-full flex-col overflow-y-auto">
+      <div className="p-6 max-w-7xl mx-auto space-y-6 w-full pb-12">
+        {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -531,6 +532,7 @@ export function PackagesClient() {
         variant="danger"
         loading={deleting}
       />
+      </div>
     </div>
   );
 }
