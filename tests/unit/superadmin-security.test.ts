@@ -8,7 +8,7 @@ import {
 const dbState = {
   users: [] as Array<{ id: string; email: string }>,
   members: [] as Array<{ userId: string; role: string; slug: string }>,
-  insertedOrg: null as any,
+  insertedOrg: null as unknown,
 };
 
 vi.mock("@/lib/db", () => ({
@@ -36,10 +36,10 @@ vi.mock("@/lib/db", () => ({
         }),
       }),
     }),
-    transaction: async (cb: any) => {
+    transaction: async (cb: (tx: unknown) => unknown) => {
       const tx = {
         insert: () => ({
-          values: (v: any) => {
+          values: (v: unknown) => {
             dbState.insertedOrg = v;
             return Promise.resolve();
           },

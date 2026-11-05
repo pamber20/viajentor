@@ -89,9 +89,9 @@ describe("Catálogo de Paquetes Turísticos para el Agente de IA", () => {
         },
       ],
       options: {
-        A: {} as any,
-        B: {} as any,
-        C: {} as any,
+        A: {} as Record<string, unknown>,
+        B: {} as Record<string, unknown>,
+        C: {} as Record<string, unknown>,
       },
     },
     services: {

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  ACCOUNT_AUTH_RATE_LIMIT,
   AUTH_RATE_LIMIT,
   checkRateLimit,
   clientIp,

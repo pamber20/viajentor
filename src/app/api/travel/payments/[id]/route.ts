@@ -1,4 +1,4 @@
-import { apiError, withAuth, withConfigAuth } from "@/lib/api";
+import { apiError, withConfigAuth } from "@/lib/api";
 import { deletePayment } from "@/server/travel/trips";
 
 export const dynamic = "force-dynamic";

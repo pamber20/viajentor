@@ -14,7 +14,6 @@ export function isPrivateIp(ip: string): boolean {
     const p0 = parts[0]!;
     const p1 = parts[1]!;
     const p2 = parts[2]!;
-    const p3 = parts[3]!;
 
     // 0.0.0.0/8 (red local)
     if (p0 === 0) return true;
@@ -162,7 +161,7 @@ export async function assertSafePublicUrl(
         };
       }
     }
-  } catch (err) {
+  } catch {
     // Si la resolución DNS falla
     return {
       ok: false,
