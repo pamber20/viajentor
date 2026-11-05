@@ -6,4 +6,14 @@
 		flush_interval -1
 	}
 	encode gzip
+
+	header {
+		# Seguridad HTTP y supresión de huella del servidor
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
 }

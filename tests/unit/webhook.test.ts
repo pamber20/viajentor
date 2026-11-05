@@ -1,8 +1,10 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  isPayloadSizeValid,
   isValidSignature,
   isValidWebhookToken,
+  MAX_WEBHOOK_PAYLOAD_BYTES,
   safeEqual,
 } from "@/server/inbox/webhook";
 
@@ -49,6 +51,28 @@ describe("capa 2: firma x-hub-signature-256 (FR-042)", () => {
   it("sin secreto configurado la capa está desactivada → pasa", () => {
     expect(isValidSignature(body, null, undefined)).toBe(true);
     expect(isValidSignature(body, "sha256=basura", undefined)).toBe(true);
+  });
+});
+
+describe("protección de tamaño de payload en webhooks (DoS mitigation)", () => {
+  it("permite payloads normales menores al límite", () => {
+    const req = new Request("http://localhost/api/webhooks/wa/test", {
+      headers: { "content-length": "1024" },
+    });
+    expect(isPayloadSizeValid(req, "x".repeat(1024))).toBe(true);
+  });
+
+  it("rechaza si content-length excede MAX_WEBHOOK_PAYLOAD_BYTES", () => {
+    const req = new Request("http://localhost/api/webhooks/wa/test", {
+      headers: { "content-length": String(MAX_WEBHOOK_PAYLOAD_BYTES + 1) },
+    });
+    expect(isPayloadSizeValid(req)).toBe(false);
+  });
+
+  it("rechaza si el body leído excede MAX_WEBHOOK_PAYLOAD_BYTES", () => {
+    const req = new Request("http://localhost/api/webhooks/wa/test");
+    const hugeBody = "a".repeat(MAX_WEBHOOK_PAYLOAD_BYTES + 10);
+    expect(isPayloadSizeValid(req, hugeBody)).toBe(false);
   });
 });
 

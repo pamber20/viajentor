@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { getEnv } from "@/lib/env";
-import { isValidSignature, isValidWebhookToken } from "@/server/inbox/webhook";
+import { isPayloadSizeValid, isValidSignature, isValidWebhookToken } from "@/server/inbox/webhook";
 import { processMetaInstagramPayload } from "@/server/instagram/ingest";
 import {
   channelDisabledResponse,
@@ -50,7 +50,14 @@ export async function POST(req: Request, { params }: Params) {
     return new Response(null, { status: 404 });
   }
 
+  if (!isPayloadSizeValid(req)) {
+    return new Response(null, { status: 413 });
+  }
+
   const rawBody = await req.text();
+  if (!isPayloadSizeValid(req, rawBody)) {
+    return new Response(null, { status: 413 });
+  }
 
   let payload: unknown;
   try {

@@ -1,4 +1,5 @@
 import { chatCompletionsUrl, modelsUrl } from "@/lib/ai/presets";
+import { assertSafePublicUrl } from "@/lib/ai/ssrf";
 
 /**
  * Sonda del proveedor para Ajustes → IA: «Probar conexión» y «Traer modelos».
@@ -44,9 +45,14 @@ export async function probeProvider(input: {
   let url: string;
   try {
     url = chatCompletionsUrl(input.baseUrl);
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new Error("protocolo");
+    const safe = await assertSafePublicUrl(url);
+    if (!safe.ok) {
+      return {
+        ok: false,
+        code: "bad_url",
+        httpStatus: 400,
+        message: safe.error,
+      };
     }
   } catch {
     return {
@@ -56,6 +62,7 @@ export async function probeProvider(input: {
       message: "La base URL no es una dirección http(s) válida",
     };
   }
+
 
   const controller = new AbortController();
   const timer = setTimeout(
@@ -204,9 +211,14 @@ export async function listModels(input: {
   let url: string;
   try {
     url = modelsUrl(input.baseUrl);
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new Error("protocolo");
+    const safe = await assertSafePublicUrl(url);
+    if (!safe.ok) {
+      return {
+        ok: false,
+        code: "bad_url",
+        httpStatus: 400,
+        message: safe.error,
+      };
     }
   } catch {
     return {
@@ -216,6 +228,7 @@ export async function listModels(input: {
       message: "La base URL no es una dirección http(s) válida",
     };
   }
+
 
   const controller = new AbortController();
   const timer = setTimeout(

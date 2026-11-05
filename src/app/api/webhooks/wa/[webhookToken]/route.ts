@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { getEnv } from "@/lib/env";
 import {
+  isPayloadSizeValid,
   isValidSignature,
   isValidWebhookToken,
   type WebhookPayload,
@@ -43,7 +44,15 @@ export async function POST(req: Request, { params }: Params) {
     return new Response(null, { status: 404 });
   }
 
+  if (!isPayloadSizeValid(req)) {
+    return new Response(null, { status: 413 });
+  }
+
   const rawBody = await req.text();
+  if (!isPayloadSizeValid(req, rawBody)) {
+    return new Response(null, { status: 413 });
+  }
+
   const signature = req.headers.get("x-hub-signature-256");
   if (!isValidSignature(rawBody, signature, env.META_APP_SECRET)) {
     return new Response(null, { status: 401 });

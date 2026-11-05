@@ -52,6 +52,16 @@ import {
   uploadGraphMedia,
   validateOutgoing,
 } from "@/server/whatsapp/media";
+import {
+  getYCloudCredentialsByOrg,
+  markYCloudReconnectRequired,
+  type YCloudCredentials,
+} from "@/server/ycloud/credentials";
+import {
+  sendYCloudMessage,
+  uploadYCloudMedia,
+  YCloudApiError,
+} from "@/lib/ycloud/client";
 
 /** Error tipado del envío; `code` mapea a HTTP en la capa de API. */
 export class SendError extends Error {
@@ -81,8 +91,10 @@ type SendResult = { messageId: string };
 
 type SendTarget = {
   conversation: typeof schema.conversation.$inferSelect;
-  /** null cuando el destino no es WhatsApp (014). */
+  /** null cuando el destino no es WhatsApp con Meta directo. */
   credentials: Credentials | null;
+  /** Credenciales de YCloud si la organización usa YCloud como proveedor de WhatsApp. */
+  ycloud?: YCloudCredentials;
   /** El destinatario en la forma que Meta espera: `to` o `recipient`. */
   destinatario: Destinatario;
   /** El identificador a secas, para lo que no arma un payload de Graph. */
@@ -305,11 +317,18 @@ async function prepareSend(
     );
   }
 
-  const credentials = await getCredentialsByOrg(organizationId);
-  if (!credentials) {
+  const ycloudCreds = await getYCloudCredentialsByOrg(organizationId);
+  const credentials = ycloudCreds ? null : await getCredentialsByOrg(organizationId);
+  if (!ycloudCreds && !credentials) {
     throw new SendError("not_connected", "No hay número de WhatsApp conectado");
   }
-  if (credentials.status === "reconnect_required") {
+  if (ycloudCreds?.status === "reconnect_required") {
+    throw new SendError(
+      "reconnect_required",
+      "La API Key de YCloud expiró o fue revocada: reconecta en Configuración"
+    );
+  }
+  if (credentials?.status === "reconnect_required") {
     throw new SendError(
       "reconnect_required",
       "El token de WhatsApp expiró: reconecta el número en Configuración"
@@ -340,7 +359,13 @@ async function prepareSend(
     );
   }
 
-  return { conversation: row.conversation, credentials, destinatario, recipient };
+  return {
+    conversation: row.conversation,
+    credentials,
+    ycloud: ycloudCreds ?? undefined,
+    destinatario,
+    recipient,
+  };
 }
 
 async function persistOutbound(input: {
@@ -436,12 +461,14 @@ export async function sendText(input: {
       ? await callMessengerSend(target, text)
       : target.tiktok
         ? await callTiktokSend(target, text)
-        : await callGraphSend(credentials!, {
-          messaging_product: "whatsapp",
-          ...target.destinatario,
-          type: "text",
-          text: { body: text },
-        });
+        : target.ycloud
+          ? await callYCloudSend(target, text)
+          : await callGraphSend(credentials!, {
+            messaging_product: "whatsapp",
+            ...target.destinatario,
+            type: "text",
+            text: { body: text },
+          });
 
   const messageId = await persistOutbound({
     organizationId: input.organizationId,
@@ -509,6 +536,71 @@ export async function sendMediaMessage(input: {
     })
     .returning();
   const asset = assetRows[0]!;
+
+  if (target.ycloud) {
+    try {
+      const ycloud = target.ycloud;
+      const to = target.recipient.startsWith("+") ? target.recipient : `+${target.recipient}`;
+      const fileUrl = await uploadYCloudMedia(ycloud.apiKey, input.file);
+
+      const mediaPayload: Record<string, unknown> = {
+        link: fileUrl,
+      };
+      if (input.caption && kind !== "audio") mediaPayload.caption = input.caption;
+      if (kind === "document" && input.file.fileName) {
+        mediaPayload.filename = input.file.fileName;
+      }
+
+      const waMessageId = await sendYCloudMessage(ycloud.apiKey, {
+        from: ycloud.phoneNumber,
+        to,
+        type: kind,
+        [kind]: mediaPayload,
+      });
+
+      const messageId = await persistOutbound({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        waMessageId,
+        type: kind,
+        text: null,
+        status: "pending",
+        origin: "operator",
+        mediaAssetId: assetId,
+        media: asset,
+      });
+      return { messageId };
+    } catch (err) {
+      let sendErr: SendError;
+      if (err instanceof SendError) {
+        sendErr = err;
+      } else if (err instanceof YCloudApiError && err.isAuthError) {
+        await markYCloudReconnectRequired(input.organizationId);
+        sendErr = new SendError(
+          "reconnect_required",
+          "La API Key de YCloud expiró: reconecta en Configuración"
+        );
+      } else {
+        sendErr = new SendError(
+          "upload_failed",
+          "No se pudo subir o enviar el adjunto a YCloud"
+        );
+      }
+      sendErr.messageId = await persistOutbound({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        waMessageId: null,
+        type: kind,
+        text: null,
+        status: "failed",
+        error: sendErr.message,
+        origin: "operator",
+        mediaAssetId: assetId,
+        media: asset,
+      });
+      throw sendErr;
+    }
+  }
 
   try {
     const waMediaId = await uploadGraphMedia(credentials!, input.file);
@@ -599,8 +691,8 @@ export async function sendStructured(
     input.organizationId
   );
   // Ubicaciones y contactos son mensajes de WhatsApp: en los demás canales no
-  // hay credenciales de WhatsApp que usar y Graph los rechazaría.
-  if (!target.credentials) {
+  // hay credenciales de WhatsApp que usar y Graph/YCloud los rechazaría.
+  if (!target.credentials && !target.ycloud) {
     throw new SendError(
       "meta_error",
       "Este canal no admite ubicaciones ni contactos; manda el texto"
@@ -618,11 +710,17 @@ export async function sendStructured(
           })),
         };
 
-  const waMessageId = await callGraphSend(target.credentials, {
-    messaging_product: "whatsapp",
-    ...target.destinatario,
-    ...payload,
-  });
+  const waMessageId = target.ycloud
+    ? await sendYCloudMessage(target.ycloud.apiKey, {
+        from: target.ycloud.phoneNumber,
+        to: target.recipient.startsWith("+") ? target.recipient : `+${target.recipient}`,
+        ...payload,
+      })
+    : await callGraphSend(target.credentials!, {
+        messaging_product: "whatsapp",
+        ...target.destinatario,
+        ...payload,
+      });
 
   const db = getDb();
   const assetRows = await db
@@ -675,6 +773,35 @@ export async function callGraphSend(
       }
       if (err.status === 0 || err.status >= 500) {
         throw new SendError("meta_unavailable", "Meta no está disponible ahora");
+      }
+      throw new SendError("meta_error", err.message);
+    }
+    throw err;
+  }
+}
+
+/** Envío de texto por YCloud. */
+async function callYCloudSend(target: SendTarget, text: string): Promise<string> {
+  const ycloud = target.ycloud!;
+  const to = target.recipient.startsWith("+") ? target.recipient : `+${target.recipient}`;
+  try {
+    return await sendYCloudMessage(ycloud.apiKey, {
+      from: ycloud.phoneNumber,
+      to,
+      type: "text",
+      text: { body: text },
+    });
+  } catch (err) {
+    if (err instanceof YCloudApiError) {
+      if (err.isAuthError) {
+        await markYCloudReconnectRequired(ycloud.organizationId);
+        throw new SendError(
+          "reconnect_required",
+          "La API Key de YCloud expiró o fue revocada: reconecta en Configuración"
+        );
+      }
+      if (err.status === 0 || err.status >= 500) {
+        throw new SendError("meta_unavailable", "YCloud no está disponible ahora");
       }
       throw new SendError("meta_error", err.message);
     }

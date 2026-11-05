@@ -86,7 +86,7 @@ async function guard(req: Request): Promise<Gate> {
   if (!agendaEnabled()) return { response: agendaDisabledResponse() };
   const denied = requireBotKey(req);
   if (denied) return { response: denied };
-  const organizationId = await resolveInstanceOrg();
+  const organizationId = await resolveInstanceOrg(req);
   if (!organizationId) {
     return {
       response: apiError(409, "no_org", "La instancia aún no tiene organización"),

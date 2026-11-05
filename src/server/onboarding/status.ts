@@ -72,6 +72,12 @@ export async function onboardingStatus(
     .from(schema.metaCredentials)
     .where(scoped(schema.metaCredentials.organizationId, organizationId))
     .limit(1);
+  const [ycloudChannel] = await db
+    .select({ status: schema.ycloudCredentials.status })
+    .from(schema.ycloudCredentials)
+    .where(scoped(schema.ycloudCredentials.organizationId, organizationId))
+    .limit(1);
+  const activeChannel = ycloudChannel ?? channel;
   const ia = await estadoIaDe(organizationId);
 
   const steps: ReadinessStep[] = [
@@ -96,17 +102,19 @@ export async function onboardingStatus(
     {
       key: "whatsapp",
       label: "WhatsApp",
-      status: channel?.status === "connected" ? "ready" : "pending",
+      status: activeChannel?.status === "connected" ? "ready" : "pending",
       nextAction:
-        channel?.status === "connected"
+        activeChannel?.status === "connected"
           ? "Número conectado"
-          : channel
-            ? "Vuelve a conectar el número con un token vigente"
+          : activeChannel
+            ? "Vuelve a conectar el número con credenciales vigentes"
             : "Vincular tu número",
       href: "/settings/whatsapp",
       problem:
-        channel?.status === "reconnect_required"
-          ? "Meta dejó de aceptar el token de WhatsApp: vuelve a conectar el número."
+        activeChannel?.status === "reconnect_required"
+          ? ycloudChannel
+            ? "YCloud dejó de aceptar la API Key de WhatsApp: vuelve a conectar el número."
+            : "Meta dejó de aceptar el token de WhatsApp: vuelve a conectar el número."
           : null,
     },
   ];

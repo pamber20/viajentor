@@ -37,36 +37,61 @@ export function parseSuperAdminEmails(raw?: string): Set<string> {
 }
 
 /**
+ * Slugs reservados por el sistema que ninguna agencia o tenant adicional puede registrar.
+ * Previene suplantación de la organización matriz o rutas del sistema.
+ */
+export const RESERVED_TENANT_SLUGS = new Set([
+  "principal",
+  "admin",
+  "api",
+  "system",
+  "superadmin",
+  "vocero",
+  "viajentor",
+  "root",
+]);
+
+/**
  * Determina si un usuario es SuperAdmin de la plataforma SaaS:
- * 1) Su correo está en SUPERADMIN_EMAILS (si se configuró), O
- * 2) Es propietario ("owner") de la organización matriz ("principal").
+ * 1) Si SUPERADMIN_EMAILS está configurado: SOLO los correos listados tienen acceso.
+ * 2) Fallback (solo si no hay SUPERADMIN_EMAILS): el propietario ("owner") de la
+ *    organización matriz inicial ("principal").
  */
 export async function isSuperAdminUser(
   userId: string,
   userEmail?: string | null
 ): Promise<boolean> {
   const configured = parseSuperAdminEmails(process.env.SUPERADMIN_EMAILS);
-  if (userEmail && configured.has(userEmail.trim().toLowerCase())) {
-    return true;
+
+  if (configured.size > 0) {
+    if (userEmail && configured.has(userEmail.trim().toLowerCase())) {
+      return true;
+    }
+    const db = getDb();
+    const rows = await db
+      .select({ email: schema.user.email })
+      .from(schema.user)
+      .where(eq(schema.user.id, userId))
+      .limit(1);
+    const email = rows[0]?.email;
+    return !!(email && configured.has(email.trim().toLowerCase()));
   }
 
+  // Fallback para entornos sin SUPERADMIN_EMAILS configurado
   const db = getDb();
   const rows = await db
     .select({
       role: schema.member.role,
       slug: schema.organization.slug,
-      email: schema.user.email,
     })
     .from(schema.member)
     .innerJoin(
       schema.organization,
       eq(schema.member.organizationId, schema.organization.id)
     )
-    .innerJoin(schema.user, eq(schema.member.userId, schema.user.id))
     .where(eq(schema.member.userId, userId));
 
   for (const r of rows) {
-    if (configured.has(r.email.trim().toLowerCase())) return true;
     if (r.role === "owner" && r.slug === "principal") return true;
   }
   return false;
@@ -98,8 +123,11 @@ export async function provisionOrganization(
   const maxSeats = input.maxSeats ?? DEFAULT_PLAN_SEATS[plan];
 
   const suffix = orgId.replace(/^org_/, "").slice(0, 6);
+  const rawSlug = input.slug?.trim();
   const slug =
-    input.slug?.trim() || slugifyAgencyName(input.name, suffix);
+    rawSlug && !RESERVED_TENANT_SLUGS.has(rawSlug.toLowerCase())
+      ? rawSlug
+      : slugifyAgencyName(input.name, suffix);
 
   const tenantConfig = normalizeTenantConfig({
     status: "active",

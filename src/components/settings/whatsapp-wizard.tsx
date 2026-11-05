@@ -54,14 +54,25 @@ type EmbeddedConfig = {
   configId: string | null;
 };
 
-type Connection = {
-  wabaId: string;
-  phoneNumberId: string;
-  displayPhoneNumber: string | null;
-  verifiedName: string | null;
-  status: "connected" | "reconnect_required";
-  tokenLast4: string;
-};
+type Connection =
+  | {
+      provider: "meta";
+      wabaId: string;
+      phoneNumberId: string;
+      displayPhoneNumber: string | null;
+      verifiedName: string | null;
+      status: "connected" | "reconnect_required";
+      tokenLast4: string;
+    }
+  | {
+      provider: "ycloud";
+      phoneNumber: string;
+      displayPhoneNumber: string | null;
+      verifiedName: string | null;
+      status: "connected" | "reconnect_required";
+      apiKeyLast4: string;
+      hasWebhookSecret: boolean;
+    };
 
 type WebhookInfo = {
   url: string;
@@ -119,10 +130,12 @@ export function WhatsappWizard() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="min-w-[12rem] flex-1">
             <p className="font-medium text-danger-text">
-              El token de WhatsApp expiró o fue revocado.
+              {connection.provider === "ycloud"
+                ? "La API Key de YCloud expiró o fue revocada."
+                : "El token de WhatsApp expiró o fue revocado."}
             </p>
             <p className="text-danger-text opacity-80">
-              Los envíos están pausados. Pega un token nuevo abajo y prueba la
+              Los envíos están pausados. Actualiza tus credenciales abajo y prueba la
               conexión para reconectar.
             </p>
           </div>
@@ -140,11 +153,17 @@ export function WhatsappWizard() {
           <CheckCircle2 className="h-5 w-5 text-success" />
           <div className="min-w-[12rem] flex-1 text-sm">
             <p className="font-medium text-success-text">
-              Número conectado: {connection.displayPhoneNumber ?? connection.phoneNumberId}
+              Número conectado ({connection.provider === "ycloud" ? "YCloud" : "Meta Cloud API"}):{" "}
+              {connection.displayPhoneNumber ??
+                (connection.provider === "ycloud"
+                  ? connection.phoneNumber
+                  : connection.phoneNumberId)}
             </p>
             <p className="text-success-text opacity-80">
               {connection.verifiedName ? `${connection.verifiedName} · ` : ""}
-              token …{connection.tokenLast4}
+              {connection.provider === "ycloud"
+                ? `API Key …${connection.apiKeyLast4}`
+                : `token …${connection.tokenLast4}`}
             </p>
           </div>
           <Badge variant="success">Conectado</Badge>
@@ -295,9 +314,13 @@ function ConnectForm({
   onRegistration: (result: WebhookRegistration | null) => void;
   onSaved: () => void;
 }) {
-  const [wabaId, setWabaId] = useState(existing?.wabaId ?? "");
+  const isMeta = existing?.provider === "meta";
+  const [providerTab, setProviderTab] = useState<"meta" | "ycloud">(
+    existing?.provider === "ycloud" ? "ycloud" : "meta"
+  );
+  const [wabaId, setWabaId] = useState(isMeta ? existing.wabaId : "");
   const [phoneNumberId, setPhoneNumberId] = useState(
-    existing?.phoneNumberId ?? ""
+    isMeta ? existing.phoneNumberId : ""
   );
   const [token, setToken] = useState("");
   const [testResult, setTestResult] = useState<
@@ -462,12 +485,35 @@ function ConnectForm({
           {existing ? "Reconectar / actualizar el número" : "Conectar tu número de WhatsApp"}
         </CardTitle>
         <CardDescription>
-          Pega las credenciales de WhatsApp Cloud API. El token se valida
-          contra Meta ANTES de guardarse y se almacena cifrado. Al guardar, el
-          webhook se registra en Meta por ti.
+          Elige el proveedor con el que opera tu número de WhatsApp y configura tus credenciales.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        <div className="flex gap-2 p-1 bg-muted/60 rounded-lg max-w-xs">
+          <Button
+            type="button"
+            variant={providerTab === "meta" ? "default" : "ghost"}
+            size="sm"
+            className="flex-1 text-xs"
+            onClick={() => setProviderTab("meta")}
+          >
+            Meta Cloud API
+          </Button>
+          <Button
+            type="button"
+            variant={providerTab === "ycloud" ? "default" : "ghost"}
+            size="sm"
+            className="flex-1 text-xs"
+            onClick={() => setProviderTab("ycloud")}
+          >
+            YCloud
+          </Button>
+        </div>
+
+        {providerTab === "ycloud" ? (
+          <YCloudForm existing={existing} onSaved={onSaved} />
+        ) : (
+          <div className="space-y-5">
         {embeddedConfig?.enabled ? (
           <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
             <div className="flex items-start gap-3">
@@ -587,7 +633,11 @@ function ConnectForm({
           <Input
             id="token"
             type="password"
-            placeholder={existing ? `Guardado (…${existing.tokenLast4}) — pega uno nuevo para cambiarlo` : "EAAG…"}
+            placeholder={
+              existing?.provider === "meta"
+                ? `Guardado (…${existing.tokenLast4}) — pega uno nuevo para cambiarlo`
+                : "EAAG…"
+            }
             value={token}
             onChange={(e) => {
               setToken(e.target.value);
@@ -627,9 +677,182 @@ function ConnectForm({
         </div>
       </div>
     )}
+          </div>
+        )}
   </CardContent>
 </Card>
 );
+}
+
+function YCloudForm({
+  existing,
+  onSaved,
+}: {
+  existing: Connection | null;
+  onSaved: () => void;
+}) {
+  const isYCloud = existing?.provider === "ycloud";
+  const [phoneNumber, setPhoneNumber] = useState(isYCloud ? existing.phoneNumber : "");
+  const [apiKey, setApiKey] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const canTest = phoneNumber.trim().length >= 5 && apiKey.trim().length >= 5;
+
+  async function test() {
+    setTesting(true);
+    setTestResult(null);
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/settings/whatsapp/ycloud/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ phoneNumber, apiKey }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok) {
+        setTestResult({
+          ok: true,
+          message: `✓ Conexión exitosa con YCloud para ${data.displayPhoneNumber}${
+            data.verifiedName ? ` (${data.verifiedName})` : ""
+          }. Ya puedes guardar.`,
+        });
+      } else {
+        setTestResult({
+          ok: false,
+          message: data?.error?.message ?? "La prueba de conexión con YCloud falló.",
+        });
+      }
+    } catch {
+      setTestResult({ ok: false, message: "Error al contactar con el servidor." });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function save() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/settings/whatsapp/ycloud", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber,
+          apiKey,
+          webhookSecret: webhookSecret.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok) {
+        setApiKey("");
+        setWebhookSecret("");
+        setTestResult(null);
+        onSaved();
+      } else {
+        setSaveError(data?.error?.message ?? "No se pudo guardar la conexión de YCloud.");
+      }
+    } catch {
+      setSaveError("Error al contactar con el servidor.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4 pt-1">
+      <div className="rounded-md border bg-muted/20 p-4 text-sm space-y-1.5">
+        <p className="font-medium text-foreground">Conexión con YCloud</p>
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Conecta tu número oficial de WhatsApp Business a través de la API de{" "}
+          <a
+            href="https://ycloud.com"
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary underline font-medium"
+          >
+            YCloud
+          </a>
+          . No necesitas registrar una app en Meta Developers.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="ycloud-phone">Número de WhatsApp (remitente)</Label>
+          <Input
+            id="ycloud-phone"
+            placeholder="+5215512345678"
+            value={phoneNumber}
+            onChange={(e) => {
+              setPhoneNumber(e.target.value);
+              setTestResult(null);
+            }}
+          />
+          <p className="text-[11px] text-muted-foreground">Formato E.164 con signo + (ej. +52... o +1...)</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ycloud-secret">Webhook Signing Secret (Opcional)</Label>
+          <Input
+            id="ycloud-secret"
+            type="password"
+            placeholder={
+              isYCloud && existing.hasWebhookSecret
+                ? "Guardado (deja en blanco para conservar)"
+                : "whsec_..."
+            }
+            value={webhookSecret}
+            onChange={(e) => setWebhookSecret(e.target.value)}
+          />
+          <p className="text-[11px] text-muted-foreground">Para verificar la firma HMAC de los eventos recibidos</p>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="ycloud-key">API Key de YCloud</Label>
+        <Input
+          id="ycloud-key"
+          type="password"
+          placeholder={
+            isYCloud
+              ? `Guardado (…${existing.apiKeyLast4}) — pega una nueva para cambiarla`
+              : "sk_..."
+          }
+          value={apiKey}
+          onChange={(e) => {
+            setApiKey(e.target.value);
+            setTestResult(null);
+          }}
+        />
+      </div>
+
+      {testResult && (
+        <p className={`text-sm ${testResult.ok ? "text-success" : "text-destructive"}`}>
+          {testResult.message}
+        </p>
+      )}
+      {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          disabled={!canTest || testing}
+          onClick={() => void test()}
+        >
+          {testing ? "Probando…" : "Probar conexión"}
+        </Button>
+        <Button
+          disabled={!testResult?.ok || saving}
+          onClick={() => void save()}
+        >
+          {saving ? "Guardando…" : "Guardar conexión"}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -704,7 +927,11 @@ function WebhookCard({
 }) {
   const [copied, setCopied] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
-  const canRegister = connection?.status === "connected";
+  const isYCloud = connection?.provider === "ycloud";
+  const canRegister = connection?.status === "connected" && !isYCloud;
+  const effectiveUrl = isYCloud
+    ? webhook.url.replace(/\/api\/webhooks\/wa\//, "/api/webhooks/ycloud/")
+    : webhook.url;
 
   async function register() {
     setRegistering(true);
@@ -736,12 +963,13 @@ function WebhookCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Webhook de WhatsApp</CardTitle>
+        <CardTitle>
+          {isYCloud ? "Webhook de WhatsApp (YCloud)" : "Webhook de WhatsApp"}
+        </CardTitle>
         <CardDescription>
-          Al guardar la conexión, esta dirección se registra en Meta por ti, en
-          el número (override). Estos valores son para el backend de tu agencia
-          o para pegarlos a mano en el panel de Meta solo si el registro
-          automático falla.
+          {isYCloud
+            ? "Copia esta URL y configúrala en tu consola de YCloud (Settings → Webhooks) para recibir mensajes y estados en tiempo real."
+            : "Al guardar la conexión, esta dirección se registra en Meta por ti, en el número (override). Estos valores son para el backend de tu agencia o para pegarlos a mano en el panel de Meta solo si el registro automático falla."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -761,7 +989,7 @@ function WebhookCard({
         {!webhook.isHttps && (
           <p className="flex items-start gap-2 rounded-md border border-warning-soft bg-warning-tint p-3 text-xs text-warning-text">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            La URL configurada no es https: Meta exige https para los webhooks.
+            La URL configurada no es https: se exige https para los webhooks.
             Ajusta APP_BASE_URL con tu dominio público.
           </p>
         )}
@@ -769,13 +997,13 @@ function WebhookCard({
           <Label>URL del webhook (callback URL)</Label>
           <div className="flex items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded-md border bg-background px-3 py-2 text-xs">
-              {webhook.url}
+              {effectiveUrl}
             </code>
             <Button
               variant="outline"
               size="icon"
               aria-label="Copiar URL"
-              onClick={() => copy(webhook.url, "url")}
+              onClick={() => copy(effectiveUrl, "url")}
             >
               <Copy className="h-4 w-4" />
             </Button>
@@ -784,8 +1012,9 @@ function WebhookCard({
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            La URL contiene el token secreto en la ruta: trátala como una
-            contraseña.
+            {isYCloud
+              ? "En tu consola de YCloud, suscribe los eventos: whatsapp.inbound_message y whatsapp.message.updated."
+              : "La URL contiene el token secreto en la ruta: trátala como una contraseña."}
           </p>
         </div>
         <div className="space-y-1.5">

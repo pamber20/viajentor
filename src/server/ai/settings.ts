@@ -22,13 +22,22 @@ import {
  * `route.ts` para poder probarlo sin sesión.
  */
 
+import { validateAiBaseUrlFormat } from "@/lib/ai/ssrf";
+
 const baseUrlSchema = z
   .string()
   .trim()
   .url()
-  .refine((u) => /^https?:\/\//i.test(u), {
-    message: "La base URL debe empezar por http:// o https://",
+  .superRefine((u, ctx) => {
+    const val = validateAiBaseUrlFormat(u);
+    if (!val.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: val.error,
+      });
+    }
   });
+
 
 /**
  * El mínimo de la llave es laxo a propósito: el formato lo decide el proveedor

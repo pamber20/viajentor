@@ -1,4 +1,4 @@
-import { apiError, withAuth } from "@/lib/api";
+import { apiError, withAuth, withConfigAuth } from "@/lib/api";
 import { getEnv } from "@/lib/env";
 import { isChannelEnabled } from "@/server/channels/enabled";
 import { registerWebhookForNumber } from "@/server/whatsapp/connect";
@@ -39,7 +39,7 @@ export const GET = withAuth(async () => {
  * Guardar ya lo hace; esto es para las conexiones anteriores a ese cambio y
  * para reintentar si Meta falló, sin volver a pegar el token.
  */
-export const POST = withAuth(async (session) => {
+export const POST = withConfigAuth(async (session) => {
   const creds = await getCredentialsByOrg(session.organizationId);
   if (!creds) {
     return apiError(

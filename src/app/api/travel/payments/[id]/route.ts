@@ -1,11 +1,11 @@
-import { apiError, withAuth } from "@/lib/api";
+import { apiError, withAuth, withConfigAuth } from "@/lib/api";
 import { deletePayment } from "@/server/travel/trips";
 
 export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export const DELETE = withAuth(async (session, _req: Request, ctx: RouteContext) => {
+export const DELETE = withConfigAuth(async (session, _req: Request, ctx: RouteContext) => {
   const { id } = await ctx.params;
   const ok = await deletePayment({
     organizationId: session.organizationId,
@@ -18,3 +18,4 @@ export const DELETE = withAuth(async (session, _req: Request, ctx: RouteContext)
 
   return Response.json({ success: true });
 });
+

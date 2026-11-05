@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withAuth, withConfigAuth } from "@/lib/api";
 import {
   getEmbeddedSignupConfig,
   processEmbeddedSignup,
@@ -24,7 +24,7 @@ const postSchema = z.object({
  * intercambia el código, obtiene el token del cliente, vincula el número,
  * cifra credenciales y suscribe los webhooks.
  */
-export const POST = withAuth(async (session, req: Request) => {
+export const POST = withConfigAuth(async (session, req: Request) => {
   const body = await parseBody(req, postSchema);
   if (!body.ok) return body.response;
 

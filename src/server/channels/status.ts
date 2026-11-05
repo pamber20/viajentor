@@ -6,6 +6,7 @@ import { enabledChannels } from "@/server/channels/enabled";
 import { getInstagramCredentialsByOrg } from "@/server/instagram/credentials";
 import { getMessengerCredentialsByOrg } from "@/server/messenger/credentials";
 import { getCredentialsByOrg } from "@/server/whatsapp/credentials";
+import { getYCloudCredentialsByOrg } from "@/server/ycloud/credentials";
 import { webhookVerifyToken } from "@/server/whatsapp/webhook-url";
 import {
   zernioConnectionsOfOrg,
@@ -38,7 +39,7 @@ import {
 export type ChannelStatus = {
   channel: Channel;
   connected: boolean;
-  source: "meta" | "zernio" | null;
+  source: "meta" | "zernio" | "ycloud" | null;
   /** La cuenta, el número o la página, como lo reconoce una persona. */
   account: string | null;
   status: "connected" | "reconnect_required" | null;
@@ -109,9 +110,10 @@ function saludDe(conn: ZernioConnection, lectura: Lectura): ChannelStatus["healt
 
 export async function channelsStatus(organizationId: string): Promise<ChannelStatus[]> {
   const encendidos = enabledChannels();
-  const [ultimos, wa, ig, fb, zernio] = await Promise.all([
+  const [ultimos, wa, ycloud, ig, fb, zernio] = await Promise.all([
     lastInboundByChannel(organizationId),
     getCredentialsByOrg(organizationId),
+    getYCloudCredentialsByOrg(organizationId),
     encendidos.has("instagram") ? getInstagramCredentialsByOrg(organizationId) : null,
     encendidos.has("messenger") ? getMessengerCredentialsByOrg(organizationId) : null,
     zernioConnectionsOfOrg(organizationId),
@@ -129,14 +131,25 @@ export async function channelsStatus(organizationId: string): Promise<ChannelSta
     const base = { channel, lastInboundAt: ultimos[channel] ?? null };
 
     if (channel === "whatsapp") {
-      filas.push({
-        ...base,
-        connected: Boolean(wa),
-        source: wa ? "meta" : null,
-        account: wa?.displayPhoneNumber ?? null,
-        status: wa?.status ?? null,
-        health: null,
-      });
+      if (ycloud) {
+        filas.push({
+          ...base,
+          connected: true,
+          source: "ycloud",
+          account: ycloud.displayPhoneNumber ?? ycloud.phoneNumber,
+          status: ycloud.status,
+          health: null,
+        });
+      } else {
+        filas.push({
+          ...base,
+          connected: Boolean(wa),
+          source: wa ? "meta" : null,
+          account: wa?.displayPhoneNumber ?? null,
+          status: wa?.status ?? null,
+          health: null,
+        });
+      }
       continue;
     }
 

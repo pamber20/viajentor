@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withAuth, withConfigAuth } from "@/lib/api";
 import {
   deleteSupplier,
   getSupplier,
@@ -92,7 +92,7 @@ export const PATCH = withAuth(async (session, req: Request, ctx: RouteContext) =
   return Response.json({ supplier: updated });
 });
 
-export const DELETE = withAuth(async (session, _req: Request, ctx: RouteContext) => {
+export const DELETE = withConfigAuth(async (session, _req: Request, ctx: RouteContext) => {
   const { id } = await ctx.params;
   const ok = await deleteSupplier({
     organizationId: session.organizationId,
@@ -105,3 +105,4 @@ export const DELETE = withAuth(async (session, _req: Request, ctx: RouteContext)
 
   return Response.json({ success: true });
 });
+

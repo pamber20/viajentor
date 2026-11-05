@@ -54,6 +54,11 @@ vi.mock("@/server/whatsapp/connect", () => ({
   registerWebhookForNumber: register,
   unregisterWebhookForNumber: unregister,
 }));
+vi.mock("@/server/ycloud/credentials", () => ({
+  desconectarYCloud: vi.fn(async () => {}),
+  getYCloudCredentialsByOrg: async () => null,
+  apiKeyLast4: (k: string) => k.slice(-4),
+}));
 
 import { DELETE, PUT } from "@/app/api/settings/whatsapp/route";
 import { GET as webhookGet, POST as webhookPost } from "@/app/api/settings/webhook/route";

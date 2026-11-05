@@ -13,6 +13,7 @@ const prefixes = {
   stage: "stg",
   leadStageEvent: "lse",
   credentials: "cred",
+  ycloudCredentials: "ycred",
   agentProfile: "agp",
   kbEntry: "kb",
   template: "tpl",

@@ -5,7 +5,12 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { getDb, schema } from "@/lib/db";
 import { getEnv } from "@/lib/env";
-import { AUTH_RATE_LIMIT, checkRateLimit, clientIp } from "@/lib/rate-limit";
+import {
+  ACCOUNT_AUTH_RATE_LIMIT,
+  AUTH_RATE_LIMIT,
+  checkRateLimit,
+  clientIp,
+} from "@/lib/rate-limit";
 import {
   onUserCreated,
   resolveActiveOrganizationId,
@@ -60,12 +65,14 @@ function createAuth() {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
-      minPasswordLength: 8,
+      minPasswordLength: process.env.AUTH_MIN_PASSWORD_LENGTH
+        ? parseInt(process.env.AUTH_MIN_PASSWORD_LENGTH, 10)
+        : 10,
     },
     plugins: [organization({ creatorRole: "owner" })],
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        // Rate limit por IP en login/registro (FR-062): 10 / 10 min → 429.
+        // Rate limit por IP y por cuenta en login/registro (FR-062): 10 / 10 min → 429.
         if (RATE_LIMITED_PATHS.has(ctx.path)) {
           const ip = clientIp(ctx.headers);
           const result = checkRateLimit(`${ctx.path}:${ip}`, AUTH_RATE_LIMIT);
@@ -73,6 +80,18 @@ function createAuth() {
             throw new APIError("TOO_MANY_REQUESTS", {
               message: "Demasiados intentos; espera unos minutos",
             });
+          }
+
+          // Mitigación de fuerza bruta distribuida: limitar también por email objetivo
+          const body = ctx.body as Record<string, unknown> | undefined;
+          const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : null;
+          if (email) {
+            const emailResult = checkRateLimit(`${ctx.path}:account:${email}`, ACCOUNT_AUTH_RATE_LIMIT);
+            if (!emailResult.allowed) {
+              throw new APIError("TOO_MANY_REQUESTS", {
+                message: "Demasiados intentos para esta cuenta; espera unos minutos",
+              });
+            }
           }
         }
         // Registro público cerrado tras la primera organización (FR-060).

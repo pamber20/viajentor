@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  ACCOUNT_AUTH_RATE_LIMIT,
   AUTH_RATE_LIMIT,
   checkRateLimit,
   clientIp,
@@ -51,7 +52,35 @@ describe("rate limit por IP (FR-062: 10 / 10 min → 429)", () => {
 describe("clientIp: a quién frenar (jamás a quién autorizar)", () => {
   const h = (init: Record<string, string>) => new Headers(init);
 
-  it("el primer salto de x-forwarded-for es el cliente", () => {
+  it("prioriza cf-connecting-ip si viene de Cloudflare", () => {
+    expect(
+      clientIp(
+        h({
+          "cf-connecting-ip": "104.28.1.1",
+          "x-real-ip": "192.168.1.1",
+          "x-forwarded-for": "10.0.0.1",
+        })
+      )
+    ).toBe("104.28.1.1");
+  });
+
+  it("soporta direcciones IPv6 válidas", () => {
+    expect(
+      clientIp(h({ "x-real-ip": "2001:0db8:85a3:0000:0000:8a2e:0370:7334" }))
+    ).toBe("2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+  });
+
+  it("descarta IPs malformadas y cae a la siguiente cabecera o 'local'", () => {
+    expect(
+      clientIp(
+        h({
+          "x-forwarded-for": "malicious_string_not_ip, 203.0.113.5",
+        })
+      )
+    ).toBe("local");
+  });
+
+  it("el primer salto de x-forwarded-for es el cliente si es IP válida", () => {
     expect(clientIp(h({ "x-forwarded-for": " 203.0.113.9 , 10.0.0.2" }))).toBe("203.0.113.9");
   });
 

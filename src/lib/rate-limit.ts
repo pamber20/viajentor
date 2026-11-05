@@ -61,18 +61,30 @@ export function checkRateLimit(
   return { allowed: true, remaining: opts.max - hits.length };
 }
 
+import { isIP } from "node:net";
+
 /**
- * La IP del cliente para LIMITAR, jamás para autorizar: el primer salto de
- * `x-forwarded-for` (detrás de Traefik/Coolify o Caddy es el cliente real),
- * luego `x-real-ip`, y "local" sin proxy. Sin proxy delante, el cliente
- * puede falsearla: por eso solo decide a quién frenar.
+ * La IP del cliente para LIMITAR, jamás para autorizar:
+ * Soporta Cloudflare (cf-connecting-ip), proxies reversos estándar (x-real-ip),
+ * y el primer salto de x-forwarded-for. Valida formato sintáctico IPv4/IPv6
+ * para evitar inyecciones de strings malformados.
  */
 export function clientIp(headers: Headers | null | undefined): string {
-  return (
-    headers?.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    headers?.get("x-real-ip") ||
-    "local"
-  );
+  if (!headers) return "local";
+
+  const candidates = [
+    headers.get("cf-connecting-ip")?.trim(),
+    headers.get("x-real-ip")?.trim(),
+    headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && isIP(candidate) !== 0) {
+      return candidate;
+    }
+  }
+
+  return "local";
 }
 
 /** Solo para tests. */
@@ -88,3 +100,6 @@ export function rateLimitKeys(): number {
 
 /** 10 intentos / 10 minutos por IP en login y registro (FR-062). */
 export const AUTH_RATE_LIMIT = { windowMs: 10 * 60 * 1000, max: 10 };
+
+/** 10 intentos / 10 minutos por cuenta de email objetivo (mitigación de fuerza bruta distribuida). */
+export const ACCOUNT_AUTH_RATE_LIMIT = { windowMs: 10 * 60 * 1000, max: 10 };

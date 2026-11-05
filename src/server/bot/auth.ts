@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { eq, or } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { apiError } from "@/lib/api";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
@@ -71,24 +72,104 @@ function validBotKey(provided: string | null): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/**
- * Organización única de la instancia (self-hosted, un negocio). Cacheada en
- * memoria: la instancia jamás cambia de organización en runtime.
- */
+export type BotOrgResolution =
+  | { ok: true; organizationId: string }
+  | { ok: false; response: Response };
+
+type OrgCacheEntry = { id: string; expiresAt: number };
+const orgCache = new Map<string, OrgCacheEntry>();
+const ORG_CACHE_TTL_MS = 60_000;
+
 let cachedOrgId: string | null = null;
 
-export async function resolveInstanceOrg(): Promise<string | null> {
-  if (cachedOrgId) return cachedOrgId;
+/**
+ * Resuelve la organización para peticiones del bot.
+ * En modo multi-tenant (múltiples agencias), extrae la cabecera
+ * `x-vocero-organization` (slug o id) o `x-organization-id`.
+ * Si no se provee cabecera y existe una sola organización en BD,
+ * se permite por retrocompatibilidad mono-tenant. Si existen varias,
+ * se devuelve null para exigir especificarla y evitar contaminación entre agencias.
+ */
+export async function resolveInstanceOrg(req?: Request): Promise<string | null> {
+  const headerVal = req
+    ? req.headers.get("x-vocero-organization")?.trim() ||
+      req.headers.get("x-organization-id")?.trim()
+    : null;
+
+  let queryVal = headerVal;
+  if (!queryVal && req) {
+    try {
+      const url = new URL(req.url);
+      queryVal =
+        url.searchParams.get("organizationId")?.trim() ||
+        url.searchParams.get("org")?.trim() ||
+        null;
+    } catch {
+      // req.url no es absoluta o parseable
+    }
+  }
+
   const db = getDb();
-  const rows = await db
+  const now = Date.now();
+
+  if (queryVal) {
+    const cached = orgCache.get(queryVal);
+    if (cached && cached.expiresAt > now) {
+      return cached.id;
+    }
+
+    const rows = await db
+      .select({ id: schema.organization.id, slug: schema.organization.slug })
+      .from(schema.organization)
+      .where(
+        or(
+          eq(schema.organization.id, queryVal),
+          eq(schema.organization.slug, queryVal)
+        )
+      )
+      .limit(1);
+
+    const found = rows[0];
+    if (!found) return null;
+
+    const entry: OrgCacheEntry = { id: found.id, expiresAt: now + ORG_CACHE_TTL_MS };
+    orgCache.set(found.id, entry);
+    if (found.slug) orgCache.set(found.slug, entry);
+
+    return found.id;
+  }
+
+  if (cachedOrgId) return cachedOrgId;
+
+  const orgs = await db
     .select({ id: schema.organization.id })
     .from(schema.organization)
-    .limit(1);
-  cachedOrgId = rows[0]?.id ?? null;
-  return cachedOrgId;
+    .limit(2);
+
+  if (orgs.length === 1) {
+    cachedOrgId = orgs[0]!.id;
+    return cachedOrgId;
+  }
+
+  // 0 orgs o >1 org sin especificar cabecera:
+  return null;
+}
+
+export async function resolveBotOrg(req: Request): Promise<BotOrgResolution> {
+  const orgId = await resolveInstanceOrg(req);
+  if (orgId) return { ok: true, organizationId: orgId };
+  return {
+    ok: false,
+    response: apiError(
+      409,
+      "no_org",
+      "Organización no encontrada o no especificada en modo multi-tenant ('x-vocero-organization')"
+    ),
+  };
 }
 
 /** Solo para tests. */
 export function resetInstanceOrgCache(): void {
   cachedOrgId = null;
+  orgCache.clear();
 }

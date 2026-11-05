@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withConfigAuth } from "@/lib/api";
 import { createSuppliersBulk } from "@/server/travel/suppliers";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +46,7 @@ const bulkImportSchema = z.object({
   suppliers: z.array(importSupplierItemSchema).min(1, "Debe enviar al menos un proveedor"),
 });
 
-export const POST = withAuth(async (session, req: Request) => {
+export const POST = withConfigAuth(async (session, req: Request) => {
   const parsed = await parseBody(req, bulkImportSchema);
   if (!parsed.ok) return parsed.response;
 

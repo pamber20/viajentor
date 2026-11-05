@@ -527,6 +527,38 @@ export const metaCredentials = pgTable(
 );
 
 /**
+ * Credenciales del proveedor YCloud para WhatsApp.
+ * Permite a las agencias conectar su número de WhatsApp vía YCloud REST API.
+ */
+export const ycloudCredentials = pgTable(
+  "ycloud_credentials",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    phoneNumber: text("phone_number").notNull(),
+    displayPhoneNumber: text("display_phone_number"),
+    verifiedName: text("verified_name"),
+    apiKeyCipher: text("api_key_cipher").notNull(),
+    apiKeyIv: text("api_key_iv").notNull(),
+    apiKeyTag: text("api_key_tag").notNull(),
+    webhookSecretCipher: text("webhook_secret_cipher"),
+    webhookSecretIv: text("webhook_secret_iv"),
+    webhookSecretTag: text("webhook_secret_tag"),
+    status: text("status", { enum: ["connected", "reconnect_required"] })
+      .notNull()
+      .default("connected"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ycloud_credentials_org_uq").on(t.organizationId),
+    uniqueIndex("ycloud_credentials_phone_uq").on(t.phoneNumber),
+  ]
+);
+
+/**
  * 014 - Credenciales del canal de Instagram. Tabla explicita (no un jsonb
  * generico) porque unas credenciales tienen forma fija y conocida: asi
  * conservan tipado e indices. El token se cifra con los mismos helpers que el

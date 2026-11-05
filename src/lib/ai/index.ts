@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { chatCompletionsUrl } from "@/lib/ai/presets";
+import { assertSafePublicUrl } from "@/lib/ai/ssrf";
 import {
   resolveAiProvider,
   type AiProvider,
@@ -162,10 +163,16 @@ async function callProvider(
   messages: ChatMessage[],
   timeoutMs = 60_000
 ): Promise<string> {
+  const url = chatCompletionsUrl(provider.baseUrl);
+  const safe = await assertSafePublicUrl(url);
+  if (!safe.ok) {
+    throw new ProviderHttpError(400, safe.error);
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(chatCompletionsUrl(provider.baseUrl), {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         // El token jamás se loguea; solo viaja en este header.
@@ -179,6 +186,7 @@ async function callProvider(
       const text = await res.text().catch(() => "");
       throw new ProviderHttpError(res.status, text);
     }
+
     const json = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
     };

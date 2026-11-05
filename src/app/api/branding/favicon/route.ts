@@ -3,6 +3,7 @@ import { getBrandingContext } from "@/server/branding";
 import { DEFAULT_BRANDING } from "@/lib/branding";
 import { FAVICON_ASSET, generatedFaviconSvg } from "@/lib/favicon";
 import { getSessionOrNull } from "@/lib/auth/session";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -31,9 +32,15 @@ function cabeceras(mime: string, cacheable: boolean): HeadersInit {
  * El icono de la pestaña. **Ruta pública**: el login también tiene pestaña, y
  * ahí todavía no hay sesión. Es la misma decisión que ya toma el GET de la
  * marca — en una instancia de un solo negocio, su nombre y su logo no son un
- * secreto.
+ * secreto. Se aplica rate limit por IP para evitar enumeración de tenants.
  */
 export async function GET(req: Request) {
+  const ip = clientIp(req.headers);
+  const rl = checkRateLimit(`favicon:${ip}`, { windowMs: 60_000, max: 120 });
+  if (!rl.allowed) {
+    return new Response(null, { status: 429 });
+  }
+
   const url = new URL(req.url);
   const cacheable = url.searchParams.has("v");
   const orgParam = url.searchParams.get("org");

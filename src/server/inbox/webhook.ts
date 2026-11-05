@@ -21,6 +21,24 @@ export function isValidWebhookToken(
 }
 
 /**
+ * Límite máximo de tamaño para payloads de webhooks (2MB).
+ * Previene DoS por consumo excesivo de memoria en peticiones no autenticadas.
+ */
+export const MAX_WEBHOOK_PAYLOAD_BYTES = 2 * 1024 * 1024;
+
+export function isPayloadSizeValid(req: Request, rawBody?: string): boolean {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength) {
+    const bytes = parseInt(contentLength, 10);
+    if (!Number.isNaN(bytes) && bytes > MAX_WEBHOOK_PAYLOAD_BYTES) return false;
+  }
+  if (rawBody && Buffer.byteLength(rawBody, "utf8") > MAX_WEBHOOK_PAYLOAD_BYTES) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Capa 2 (opcional): firma HMAC-SHA256 de Meta sobre el body CRUDO.
  * Devuelve true si no hay secreto configurado (capa desactivada).
  */
@@ -29,7 +47,14 @@ export function isValidSignature(
   signatureHeader: string | null,
   appSecret: string | undefined
 ): boolean {
-  if (!appSecret) return true;
+  if (!appSecret) {
+    if (process.env.NODE_ENV === "production") {
+      console.warn(
+        "[webhook:security] META_APP_SECRET no está configurado en producción. La verificación de firma HMAC-SHA256 está desactivada."
+      );
+    }
+    return true;
+  }
   if (!signatureHeader?.startsWith("sha256=")) return false;
   const expected = createHmac("sha256", appSecret)
     .update(rawBody, "utf8")

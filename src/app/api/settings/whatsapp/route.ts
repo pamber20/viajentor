@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withAuth, withConfigAuth } from "@/lib/api";
 import {
   desconectarCanal,
   getCredentialsByOrg,
@@ -17,13 +17,35 @@ import {
   webhookVerifyToken,
 } from "@/server/whatsapp/webhook-url";
 
+import {
+  desconectarYCloud,
+  getYCloudCredentialsByOrg,
+  apiKeyLast4,
+} from "@/server/ycloud/credentials";
+
 export const dynamic = "force-dynamic";
 
 export const GET = withAuth(async (session) => {
+  const ycloud = await getYCloudCredentialsByOrg(session.organizationId);
+  if (ycloud) {
+    return Response.json({
+      connection: {
+        provider: "ycloud",
+        phoneNumber: ycloud.phoneNumber,
+        displayPhoneNumber: ycloud.displayPhoneNumber,
+        verifiedName: ycloud.verifiedName,
+        status: ycloud.status,
+        apiKeyLast4: apiKeyLast4(ycloud.apiKey),
+        hasWebhookSecret: Boolean(ycloud.webhookSecret),
+      },
+    });
+  }
+
   const creds = await getCredentialsByOrg(session.organizationId);
   if (!creds) return Response.json({ connection: null });
   return Response.json({
     connection: {
+      provider: "meta",
       wabaId: creds.wabaId,
       phoneNumberId: creds.phoneNumberId,
       displayPhoneNumber: creds.displayPhoneNumber,
@@ -49,7 +71,7 @@ const putSchema = z.object({
  * guardada y es válida: se avisa en `webhook` y la tarjeta del webhook ofrece
  * reintentar (o pegar la URL a mano, que sigue a la vista).
  */
-export const PUT = withAuth(async (session, req: Request) => {
+export const PUT = withConfigAuth(async (session, req: Request) => {
   const body = await parseBody(req, putSchema);
   if (!body.ok) return body.response;
 
@@ -58,6 +80,8 @@ export const PUT = withAuth(async (session, req: Request) => {
     const status = check.code === "meta_unavailable" ? 503 : 422;
     return apiError(status, check.code, check.message);
   }
+
+  await desconectarYCloud(session.organizationId);
 
   await saveCredentials({
     organizationId: session.organizationId,
@@ -93,7 +117,8 @@ export const PUT = withAuth(async (session, req: Request) => {
  * borra la bandeja: las conversaciones son de la organización, no de la
  * conexión. Idempotente: sin conexión responde 200 igual.
  */
-export const DELETE = withAuth(async (session) => {
+export const DELETE = withConfigAuth(async (session) => {
+  await desconectarYCloud(session.organizationId);
   const creds = await getCredentialsByOrg(session.organizationId);
   if (creds) {
     await unregisterWebhookForNumber({
@@ -105,3 +130,4 @@ export const DELETE = withAuth(async (session) => {
   await desconectarCanal(session.organizationId);
   return Response.json({ ok: true });
 });
+
