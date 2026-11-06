@@ -13,7 +13,8 @@ RUN npm config set strict-ssl false && npm install -g pnpm@9.15.4 && pnpm config
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 ENV CI=true
-RUN pnpm install --frozen-lockfile || pnpm install
+ENV NODE_ENV=development
+RUN pnpm install --frozen-lockfile --prod=false || pnpm install --prod=false
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
