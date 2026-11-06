@@ -17,6 +17,8 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    expose:
+      - 3000
     environment:
       APP_BASE_URL: ${APP_BASE_URL}
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/vocero
