@@ -18,31 +18,36 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     expose:
-      - 3000
+      - "3000"
     labels:
       - "coolify.managed=true"
       - "traefik.enable=true"
       - "traefik.docker.network=coolify"
       - "traefik.http.routers.viajentor-http.rule=Host(`viajentor.neweixo.cloud`)"
       - "traefik.http.routers.viajentor-http.entrypoints=http"
+      - "traefik.http.routers.viajentor-http.service=viajentor"
       - "traefik.http.routers.viajentor-https.rule=Host(`viajentor.neweixo.cloud`)"
       - "traefik.http.routers.viajentor-https.entrypoints=https"
       - "traefik.http.routers.viajentor-https.tls=true"
       - "traefik.http.routers.viajentor-https.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.viajentor-https.service=viajentor"
       - "traefik.http.services.viajentor.loadbalancer.server.port=3000"
     environment:
-      APP_BASE_URL: ${APP_BASE_URL}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/vocero}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN}
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      SERVICE_FQDN_APP_3000: ${SERVICE_FQDN_APP:-https://viajentor.neweixo.cloud}
+      APP_BASE_URL: ${APP_BASE_URL:-https://viajentor.neweixo.cloud}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD:-0956e3c3f4fe445d99c5de5ca1c3f32b}@postgres:5432/vocero}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-12b0f562d67d6a7fd39aecb3ab50eb1db4127e1697544855b62895c1b28c16e3}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-jpJ6d+6hpX02vn377wFhj5J+FwQe4yBB8wvaaHzUdcM=}
+      META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN:-1bff1be5436c0f1aca407b263743e9a6}
       META_APP_SECRET: ${META_APP_SECRET:-}
       META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v25.0}
       OPENROUTER_API_TOKEN: ${OPENROUTER_API_TOKEN:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
       OPENROUTER_JUDGE_MODEL: ${OPENROUTER_JUDGE_MODEL:-}
-      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-}
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-true}
       SUPERADMIN_EMAILS: ${SUPERADMIN_EMAILS:-}
       AGENT_COALESCE_MS: ${AGENT_COALESCE_MS:-6000}
       CHANNELS: ${CHANNELS:-whatsapp,instagram,messenger}
@@ -65,10 +70,11 @@ services:
       - default
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-0956e3c3f4fe445d99c5de5ca1c3f32b}
       POSTGRES_DB: vocero
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
-      - vocero_pg:/var/lib/postgresql/data
+      - vocero_pg_v2:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d vocero"]
       interval: 10s
@@ -76,7 +82,7 @@ services:
       retries: 10
 
 volumes:
-  vocero_pg:
+  vocero_pg_v2:
   vocero_app_data:
 
 networks:

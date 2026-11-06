@@ -14,7 +14,11 @@ export type EncryptedValue = {
 };
 
 function getKey(): Buffer {
-  const key = Buffer.from(getEnv().ENCRYPTION_KEY, "base64");
+  const raw = getEnv().ENCRYPTION_KEY;
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+    return Buffer.from(raw, "hex");
+  }
+  const key = Buffer.from(raw, "base64");
   if (key.length !== 32) {
     throw new Error("ENCRYPTION_KEY debe ser 32 bytes en base64");
   }

@@ -14,10 +14,15 @@ export const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(16),
   ENCRYPTION_KEY: z
     .string()
-    .refine((v) => Buffer.from(v, "base64").length === 32, {
-      message:
-        "ENCRYPTION_KEY debe ser 32 bytes en base64 (genera con: openssl rand -base64 32)",
-    }),
+    .refine(
+      (v) =>
+        Buffer.from(v, "base64").length === 32 ||
+        /^[0-9a-fA-F]{64}$/.test(v),
+      {
+        message:
+          "ENCRYPTION_KEY debe ser 32 bytes en base64 (genera con: openssl rand -base64 32)",
+      }
+    ),
   META_WEBHOOK_VERIFY_TOKEN: z.string().min(8),
   META_APP_ID: z.string().optional(),
   META_APP_SECRET: z.string().optional(),
