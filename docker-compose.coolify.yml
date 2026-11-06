@@ -32,7 +32,7 @@ services:
       - "traefik.http.services.viajentor.loadbalancer.server.port=3000"
     environment:
       APP_BASE_URL: ${APP_BASE_URL}
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/vocero
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/vocero}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN}
