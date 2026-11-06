@@ -19,6 +19,17 @@ services:
     restart: unless-stopped
     expose:
       - 3000
+    labels:
+      - "coolify.managed=true"
+      - "traefik.enable=true"
+      - "traefik.docker.network=coolify"
+      - "traefik.http.routers.viajentor-http.rule=Host(`viajentor.neweixo.cloud`)"
+      - "traefik.http.routers.viajentor-http.entrypoints=http"
+      - "traefik.http.routers.viajentor-https.rule=Host(`viajentor.neweixo.cloud`)"
+      - "traefik.http.routers.viajentor-https.entrypoints=https"
+      - "traefik.http.routers.viajentor-https.tls=true"
+      - "traefik.http.routers.viajentor-https.tls.certresolver=letsencrypt"
+      - "traefik.http.services.viajentor.loadbalancer.server.port=3000"
     environment:
       APP_BASE_URL: ${APP_BASE_URL}
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/vocero
