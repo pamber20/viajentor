@@ -133,7 +133,7 @@ export async function sendYCloudMessage(
 ): Promise<string> {
   let res: Response;
   try {
-    res = await fetch(`${YCLOUD_API_BASE_URL}/whatsapp/messages/send`, {
+    res = await fetch(`${YCLOUD_API_BASE_URL}/whatsapp/messages`, {
       method: "POST",
       headers: {
         "X-API-Key": apiKey.trim(),
