@@ -8,6 +8,10 @@ import {
 } from "@/server/inbox/webhook";
 import { processEchoesValue, processMessagesValue } from "@/server/inbox/ingest";
 import { processTemplateStatusValue } from "@/server/whatsapp/template-events";
+import {
+  processYCloudWebhookPayload,
+  type YCloudWebhookPayload,
+} from "@/server/ycloud/webhook";
 
 /**
  * Webhook público de WhatsApp (contrato webhook.md).
@@ -77,8 +81,17 @@ export async function POST(req: Request, { params }: Params) {
   return Response.json({ received: true });
 }
 
-async function processPayload(payload: WebhookPayload): Promise<void> {
-  for (const entry of payload.entry ?? []) {
+async function processPayload(payload: WebhookPayload | Record<string, unknown>): Promise<void> {
+  if (
+    "type" in payload &&
+    typeof payload.type === "string" &&
+    payload.type.startsWith("whatsapp.")
+  ) {
+    await processYCloudWebhookPayload(payload as unknown as YCloudWebhookPayload);
+    return;
+  }
+
+  for (const entry of (payload as WebhookPayload).entry ?? []) {
     for (const change of entry.changes ?? []) {
       if (!change.value) continue;
       if (change.field === "messages") {

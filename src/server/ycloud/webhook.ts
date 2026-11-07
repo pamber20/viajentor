@@ -27,7 +27,7 @@ export function isValidYCloudSignature(
   for (const part of parts) {
     const [k, v] = part.split("=");
     if (k?.trim() === "t") timestamp = v?.trim() ?? "";
-    if (k?.trim() === "v1") signature = v?.trim() ?? "";
+    if (k?.trim() === "v1" || k?.trim() === "s") signature = v?.trim() ?? "";
   }
 
   if (timestamp && signature) {
@@ -49,7 +49,7 @@ export function isValidYCloudSignature(
 
 export type YCloudWebhookInboundEvent = {
   id: string;
-  type: "whatsapp.inbound_message";
+  type: "whatsapp.inbound_message" | "whatsapp.inbound_message.received";
   createTime?: string;
   whatsappInboundMessage: {
     id: string;
@@ -117,7 +117,10 @@ export async function processYCloudWebhookPayload(
     return;
   }
 
-  if (payload.type === "whatsapp.inbound_message") {
+  if (
+    payload.type === "whatsapp.inbound_message" ||
+    payload.type === "whatsapp.inbound_message.received"
+  ) {
     const inbound = (payload as YCloudWebhookInboundEvent).whatsappInboundMessage;
     if (!inbound?.to || !inbound.from || !inbound.id) return;
 
