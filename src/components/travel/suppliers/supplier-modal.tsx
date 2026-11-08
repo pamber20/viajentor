@@ -27,6 +27,7 @@ export function SupplierModal({
   defaultType,
   defaultCity,
   defaultName,
+  existingSuppliers,
   onClose,
   onSaved,
 }: {
@@ -34,6 +35,7 @@ export function SupplierModal({
   defaultType?: TravelSupplierType;
   defaultCity?: string;
   defaultName?: string;
+  existingSuppliers?: TravelSupplier[];
   onClose: () => void;
   onSaved: (supplier: TravelSupplier) => void;
 }) {
@@ -84,6 +86,23 @@ export function SupplierModal({
     if (!name.trim()) {
       setError("El nombre del proveedor es obligatorio");
       return;
+    }
+
+    if (existingSuppliers) {
+      const trimmedCandidate = name.trim().toLowerCase();
+      const isDuplicate = existingSuppliers.some(
+        (s) =>
+          s.id !== supplier?.id &&
+          s.type === type &&
+          s.name.trim().toLowerCase() === trimmedCandidate
+      );
+      if (isDuplicate) {
+        const typeLabel = SUPPLIER_TYPES.find((t) => t.value === type)?.label || type;
+        const msg = `Ya existe un proveedor registrado con el nombre "${name.trim()}" para la categoría "${typeLabel}".`;
+        setError(msg);
+        toast(msg, "error");
+        return;
+      }
     }
 
     setSaving(true);
@@ -220,7 +239,10 @@ export function SupplierModal({
               <label className="text-xs font-semibold text-text-2">Nombre comercial</label>
               <Input
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (error) setError(null);
+                }}
                 placeholder="Ej. Hotel Las Américas, Avianca, Receptivos del Caribe"
                 required
               />
@@ -230,7 +252,10 @@ export function SupplierModal({
               <label className="text-xs font-semibold text-text-2">Tipo de servicio</label>
               <select
                 value={type}
-                onChange={(e) => setType(e.target.value as TravelSupplierType)}
+                onChange={(e) => {
+                  setType(e.target.value as TravelSupplierType);
+                  if (error) setError(null);
+                }}
                 className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm"
               >
                 {SUPPLIER_TYPES.map((t) => (

@@ -183,6 +183,8 @@ export function ImportSuppliersModal({
 
     const rows: ParsedSupplierRow[] = [];
 
+    const seenKeys = new Set<string>();
+
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
       if (!line) continue;
@@ -196,12 +198,21 @@ export function ImportSuppliersModal({
       const contactPhone = phoneIdx !== -1 ? cols[phoneIdx]?.trim() : undefined;
       const rawCommission = commissionIdx !== -1 ? cols[commissionIdx]?.trim() : "";
 
+      const parsedType = normalizeType(rawType ?? "");
       let isValid = true;
       let error = "";
 
       if (!name) {
         isValid = false;
         error = "Nombre requerido";
+      } else {
+        const key = `${parsedType}:${name.toLowerCase()}`;
+        if (seenKeys.has(key)) {
+          isValid = false;
+          error = "Nombre duplicado para este tipo de servicio en el archivo";
+        } else {
+          seenKeys.add(key);
+        }
       }
 
       // Separar ciudades operativas por coma, pleca o guion
@@ -217,7 +228,7 @@ export function ImportSuppliersModal({
       rows.push({
         id: `row-${i}-${Date.now()}`,
         name,
-        type: normalizeType(rawType ?? ""),
+        type: parsedType,
         operatingCities,
         hotelAddress: hotelAddress || undefined,
         contactEmail: contactEmail || undefined,

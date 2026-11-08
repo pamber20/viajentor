@@ -55,7 +55,15 @@ export const POST = withConfigAuth(async (session, req: Request) => {
       organizationId: session.organizationId,
       suppliers: parsed.data.suppliers,
     });
-    return Response.json({ success: true, count: result.count, suppliers: result.suppliers }, { status: 201 });
+    return Response.json(
+      {
+        success: true,
+        count: result.count,
+        suppliers: result.suppliers,
+        skippedCount: result.skippedCount,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     return apiError(
       500,

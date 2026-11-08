@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, ne, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
@@ -98,6 +98,60 @@ export async function getSupplier(input: {
   return serializeSupplier(rows[0]);
 }
 
+export class DuplicateSupplierError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DuplicateSupplierError";
+  }
+}
+
+export const SUPPLIER_TYPE_LABELS: Record<TravelSupplierType, string> = {
+  hotel: "Hotel / Alojamiento",
+  airline: "Aerolínea",
+  operator: "Operador Turístico / Receptivo",
+  transport: "Transporte Terrestre",
+  insurance: "Asistencia Médica / Seguro",
+  other: "Otro",
+};
+
+export function isDuplicateSupplierName(
+  existing: Array<{ id?: string; name: string; type: string }>,
+  candidate: { id?: string; name: string; type: string }
+): boolean {
+  const candidateName = candidate.name.trim().toLowerCase();
+  if (!candidateName) return false;
+  return existing.some((item) => {
+    if (candidate.id && item.id === candidate.id) return false;
+    return item.type === candidate.type && item.name.trim().toLowerCase() === candidateName;
+  });
+}
+
+export async function checkSupplierExists(input: {
+  organizationId: string;
+  name: string;
+  type: TravelSupplierType;
+  excludeId?: string;
+}): Promise<boolean> {
+  const db = getDb();
+  const normalizedName = input.name.trim().toLowerCase();
+
+  const rows = await db
+    .select({ id: schema.travelSupplier.id })
+    .from(schema.travelSupplier)
+    .where(
+      scoped(
+        schema.travelSupplier.organizationId,
+        input.organizationId,
+        eq(schema.travelSupplier.type, input.type),
+        sql`lower(trim(${schema.travelSupplier.name})) = ${normalizedName}`,
+        input.excludeId ? ne(schema.travelSupplier.id, input.excludeId) : undefined
+      )
+    )
+    .limit(1);
+
+  return rows.length > 0;
+}
+
 export interface CreateSupplierInput {
   organizationId: string;
   name: string;
@@ -118,6 +172,20 @@ export interface CreateSupplierInput {
 }
 
 export async function createSupplier(input: CreateSupplierInput): Promise<TravelSupplier> {
+  const trimmedName = input.name.trim();
+  const exists = await checkSupplierExists({
+    organizationId: input.organizationId,
+    name: trimmedName,
+    type: input.type,
+  });
+
+  if (exists) {
+    const typeLabel = SUPPLIER_TYPE_LABELS[input.type] ?? input.type;
+    throw new DuplicateSupplierError(
+      `Ya existe un proveedor registrado con el nombre "${trimmedName}" para el tipo de servicio "${typeLabel}".`
+    );
+  }
+
   const db = getDb();
   const id = newId("travelSupplier");
 
@@ -126,7 +194,7 @@ export async function createSupplier(input: CreateSupplierInput): Promise<Travel
     .values({
       id,
       organizationId: input.organizationId,
-      name: input.name.trim(),
+      name: trimmedName,
       type: input.type,
       contact: input.contact ?? null,
       negotiatedRates: input.negotiatedRates ?? null,
@@ -169,6 +237,32 @@ export interface UpdateSupplierInput {
 
 export async function updateSupplier(input: UpdateSupplierInput): Promise<TravelSupplier | null> {
   const db = getDb();
+
+  if (input.name !== undefined || input.type !== undefined) {
+    const current = await getSupplier({
+      organizationId: input.organizationId,
+      id: input.id,
+    });
+
+    if (current) {
+      const targetName = input.name !== undefined ? input.name.trim() : current.name;
+      const targetType = input.type !== undefined ? input.type : current.type;
+
+      const exists = await checkSupplierExists({
+        organizationId: input.organizationId,
+        name: targetName,
+        type: targetType,
+        excludeId: input.id,
+      });
+
+      if (exists) {
+        const typeLabel = SUPPLIER_TYPE_LABELS[targetType] ?? targetType;
+        throw new DuplicateSupplierError(
+          `Ya existe otro proveedor registrado con el nombre "${targetName}" para el tipo de servicio "${typeLabel}".`
+        );
+      }
+    }
+  }
 
   const patch: Partial<typeof schema.travelSupplier.$inferInsert> = {
     updatedAt: new Date(),
@@ -224,25 +318,57 @@ export async function deleteSupplier(input: {
 export async function createSuppliersBulk(input: {
   organizationId: string;
   suppliers: Array<Omit<CreateSupplierInput, "organizationId">>;
-}): Promise<{ count: number; suppliers: TravelSupplier[] }> {
+}): Promise<{ count: number; suppliers: TravelSupplier[]; skippedCount: number }> {
   const db = getDb();
-  if (input.suppliers.length === 0) return { count: 0, suppliers: [] };
+  if (input.suppliers.length === 0) return { count: 0, suppliers: [], skippedCount: 0 };
 
-  const valuesToInsert = input.suppliers.map((s) => ({
-    id: newId("travelSupplier"),
-    organizationId: input.organizationId,
-    name: s.name.trim(),
-    type: s.type,
-    contact: s.contact ?? null,
-    negotiatedRates: s.negotiatedRates ?? null,
-    commission: s.commission ?? null,
-    sla: s.sla?.trim() ?? null,
-    rating: s.rating ?? 5,
-    notes: s.notes?.trim() ?? null,
-    active: s.active ?? true,
-    operatingCities: s.operatingCities ?? null,
-    hotelMeta: s.hotelMeta ?? null,
-  }));
+  const existingRows = await db
+    .select({
+      id: schema.travelSupplier.id,
+      name: schema.travelSupplier.name,
+      type: schema.travelSupplier.type,
+    })
+    .from(schema.travelSupplier)
+    .where(eq(schema.travelSupplier.organizationId, input.organizationId));
+
+  const existingMap = new Set<string>(
+    existingRows.map((r) => `${r.type}:${r.name.trim().toLowerCase()}`)
+  );
+
+  const valuesToInsert: Array<typeof schema.travelSupplier.$inferInsert> = [];
+  let skippedCount = 0;
+
+  for (const s of input.suppliers) {
+    const trimmedName = s.name.trim();
+    const key = `${s.type}:${trimmedName.toLowerCase()}`;
+
+    if (existingMap.has(key)) {
+      skippedCount++;
+      continue;
+    }
+
+    existingMap.add(key);
+
+    valuesToInsert.push({
+      id: newId("travelSupplier"),
+      organizationId: input.organizationId,
+      name: trimmedName,
+      type: s.type,
+      contact: s.contact ?? null,
+      negotiatedRates: s.negotiatedRates ?? null,
+      commission: s.commission ?? null,
+      sla: s.sla?.trim() ?? null,
+      rating: s.rating ?? 5,
+      notes: s.notes?.trim() ?? null,
+      active: s.active ?? true,
+      operatingCities: s.operatingCities ?? null,
+      hotelMeta: s.hotelMeta ?? null,
+    });
+  }
+
+  if (valuesToInsert.length === 0) {
+    return { count: 0, suppliers: [], skippedCount };
+  }
 
   const inserted = await db
     .insert(schema.travelSupplier)
@@ -252,5 +378,6 @@ export async function createSuppliersBulk(input: {
   return {
     count: inserted.length,
     suppliers: inserted.map(serializeSupplier),
+    skippedCount,
   };
 }

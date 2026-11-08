@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { apiError, parseBody, withAuth, withConfigAuth } from "@/lib/api";
 import {
+  DuplicateSupplierError,
   deleteSupplier,
   getSupplier,
   updateSupplier,
@@ -79,17 +80,25 @@ export const PATCH = withAuth(async (session, req: Request, ctx: RouteContext) =
   const body = await parseBody(req, updateSupplierSchema);
   if (!body.ok) return body.response;
 
-  const updated = await updateSupplier({
-    organizationId: session.organizationId,
-    id,
-    ...body.data,
-  });
+  try {
+    const updated = await updateSupplier({
+      organizationId: session.organizationId,
+      id,
+      ...body.data,
+    });
 
-  if (!updated) {
-    return apiError(404, "not_found", "Proveedor no encontrado");
+    if (!updated) {
+      return apiError(404, "not_found", "Proveedor no encontrado");
+    }
+
+    return Response.json({ supplier: updated });
+  } catch (err) {
+    if (err instanceof DuplicateSupplierError) {
+      return apiError(409, "supplier_duplicate", err.message);
+    }
+    console.error("[suppliers] error al actualizar proveedor:", err);
+    return apiError(500, "supplier_update_error", "No se pudo actualizar el proveedor");
   }
-
-  return Response.json({ supplier: updated });
 });
 
 export const DELETE = withConfigAuth(async (session, _req: Request, ctx: RouteContext) => {

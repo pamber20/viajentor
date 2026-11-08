@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { apiError, parseBody, withAuth } from "@/lib/api";
 import {
+  DuplicateSupplierError,
   createSupplier,
   listSuppliers,
 } from "@/server/travel/suppliers";
@@ -86,6 +87,9 @@ export const POST = withAuth(async (session, req: Request) => {
     });
     return Response.json({ supplier }, { status: 201 });
   } catch (err) {
+    if (err instanceof DuplicateSupplierError) {
+      return apiError(409, "supplier_duplicate", err.message);
+    }
     console.error("[suppliers] error al crear proveedor:", err);
     return apiError(500, "supplier_create_error", "No se pudo registrar el proveedor");
   }

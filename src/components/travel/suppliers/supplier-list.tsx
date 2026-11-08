@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Building2,
   CheckCircle2,
   Clock,
   Edit2,
   Hotel,
+  LayoutGrid,
+  List,
   Mail,
   MapPin,
   Phone,
@@ -43,6 +48,17 @@ const TYPE_CONFIG: Record<
   other: { label: "Otro", icon: Building2, color: "text-gray-500 bg-gray-500/10 border-gray-500/20" },
 };
 
+type SortField =
+  | "name"
+  | "type"
+  | "contact"
+  | "cities"
+  | "commission"
+  | "rating"
+  | "active";
+
+type SortDirection = "asc" | "desc";
+
 export function SupplierListClient() {
   const [suppliers, setSuppliers] = useState<TravelSupplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,12 +66,45 @@ export function SupplierListClient() {
   const [selectedType, setSelectedType] = useState<TravelSupplierType | "all">("all");
   const [activeOnly, setActiveOnly] = useState(false);
 
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
   const [modalSupplier, setModalSupplier] = useState<TravelSupplier | null | undefined>(undefined);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmSupplierId, setConfirmSupplierId] = useState<string | null>(null);
 
   const { toast } = useToast();
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("vocero_suppliers_view_mode");
+      if (saved === "grid" || saved === "list") {
+        setViewMode(saved);
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
+  const handleViewModeChange = (mode: "grid" | "list") => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("vocero_suppliers_view_mode", mode);
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
 
   const fetchSuppliers = useCallback(async () => {
     setLoading(true);
@@ -102,6 +151,97 @@ export function SupplierListClient() {
 
   const activeCount = suppliers.filter((s) => s.active).length;
 
+  const sortedSuppliers = useMemo(() => {
+    return [...suppliers].sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case "name":
+          comparison = (a.name || "").localeCompare(b.name || "", "es", { sensitivity: "base" });
+          break;
+        case "type": {
+          const labelA = TYPE_CONFIG[a.type]?.label || a.type;
+          const labelB = TYPE_CONFIG[b.type]?.label || b.type;
+          comparison = labelA.localeCompare(labelB, "es", { sensitivity: "base" });
+          break;
+        }
+        case "contact": {
+          const contactA = (a.contact?.name || a.contact?.email || a.contact?.phone || "").toLowerCase();
+          const contactB = (b.contact?.name || b.contact?.email || b.contact?.phone || "").toLowerCase();
+          comparison = contactA.localeCompare(contactB, "es", { sensitivity: "base" });
+          break;
+        }
+        case "cities": {
+          const citiesA = (a.operatingCities || []).join(", ").toLowerCase();
+          const citiesB = (b.operatingCities || []).join(", ").toLowerCase();
+          comparison = citiesA.localeCompare(citiesB, "es", { sensitivity: "base" });
+          break;
+        }
+        case "commission": {
+          const commA = a.commission ?? -1;
+          const commB = b.commission ?? -1;
+          comparison = commA - commB;
+          break;
+        }
+        case "rating": {
+          const rateA = a.rating ?? 0;
+          const rateB = b.rating ?? 0;
+          comparison = rateA - rateB;
+          break;
+        }
+        case "active": {
+          const actA = a.active ? 1 : 0;
+          const actB = b.active ? 1 : 0;
+          comparison = actA - actB;
+          break;
+        }
+        default:
+          comparison = 0;
+      }
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [suppliers, sortField, sortDirection]);
+
+  const renderSortHeader = (
+    label: string,
+    field: SortField,
+    align: "left" | "right" | "center" = "left"
+  ) => {
+    const isActive = sortField === field;
+    return (
+      <th
+        onClick={() => handleSort(field)}
+        className={`px-4 py-3 cursor-pointer select-none hover:bg-muted/60 transition-colors text-xs font-bold text-text-2 ${
+          align === "right"
+            ? "text-right"
+            : align === "center"
+            ? "text-center"
+            : "text-left"
+        }`}
+      >
+        <div
+          className={`inline-flex items-center gap-1.5 ${
+            align === "right"
+              ? "justify-end"
+              : align === "center"
+              ? "justify-center"
+              : "justify-start"
+          }`}
+        >
+          <span>{label}</span>
+          {isActive ? (
+            sortDirection === "asc" ? (
+              <ArrowUp className="h-3.5 w-3.5 text-brand" />
+            ) : (
+              <ArrowDown className="h-3.5 w-3.5 text-brand" />
+            )
+          ) : (
+            <ArrowUpDown className="h-3 w-3 text-text-3 opacity-60 hover:opacity-100" />
+          )}
+        </div>
+      </th>
+    );
+  };
+
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       {/* Header */}
@@ -143,15 +283,45 @@ export function SupplierListClient() {
             />
           </div>
 
-          <label className="flex items-center gap-2 text-xs text-text-2 cursor-pointer font-medium select-none">
-            <input
-              type="checkbox"
-              checked={activeOnly}
-              onChange={(e) => setActiveOnly(e.target.checked)}
-              className="h-4 w-4 rounded border-input"
-            />
-            Solo activos ({activeCount})
-          </label>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs text-text-2 cursor-pointer font-medium select-none">
+              <input
+                type="checkbox"
+                checked={activeOnly}
+                onChange={(e) => setActiveOnly(e.target.checked)}
+                className="h-4 w-4 rounded border-input"
+              />
+              Solo activos ({activeCount})
+            </label>
+
+            {/* Toggle Grid / List */}
+            <div className="flex items-center p-0.5 rounded-lg border bg-card shrink-0">
+              <button
+                type="button"
+                onClick={() => handleViewModeChange("list")}
+                className={`p-1.5 rounded-md transition ${
+                  viewMode === "list"
+                    ? "bg-brand text-brand-fg shadow-2xs"
+                    : "text-text-3 hover:text-foreground"
+                }`}
+                title="Vista Lista (Tabla ordenable)"
+              >
+                <List className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleViewModeChange("grid")}
+                className={`p-1.5 rounded-md transition ${
+                  viewMode === "grid"
+                    ? "bg-brand text-brand-fg shadow-2xs"
+                    : "text-text-3 hover:text-foreground"
+                }`}
+                title="Vista Cuadrícula"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Type pills */}
@@ -207,7 +377,7 @@ export function SupplierListClient() {
           <div className="flex h-48 items-center justify-center text-xs text-text-3">
             Cargando proveedores...
           </div>
-        ) : suppliers.length === 0 ? (
+        ) : sortedSuppliers.length === 0 ? (
           <EmptyState
             icon={Building2}
             title="No se encontraron proveedores"
@@ -219,9 +389,198 @@ export function SupplierListClient() {
               </Button>
             }
           />
+        ) : viewMode === "list" ? (
+          /* Vista Tabla / Lista con ordenamiento por columnas */
+          <div className="overflow-x-auto rounded-xl border bg-card shadow-xs">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/40 text-text-2 font-bold uppercase tracking-wider border-b">
+                <tr>
+                  {renderSortHeader("Proveedor", "name")}
+                  {renderSortHeader("Tipo de Servicio", "type")}
+                  {renderSortHeader("Contacto", "contact")}
+                  {renderSortHeader("Ciudades", "cities")}
+                  {renderSortHeader("Comisión", "commission", "right")}
+                  {renderSortHeader("Calificación", "rating", "center")}
+                  {renderSortHeader("Estado", "active", "center")}
+                  <th className="px-4 py-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border font-medium">
+                {sortedSuppliers.map((s) => {
+                  const typeCfg = TYPE_CONFIG[s.type] ?? TYPE_CONFIG.other;
+                  const TypeIcon = typeCfg.icon;
+
+                  return (
+                    <tr
+                      key={s.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
+                      {/* Proveedor / Nombre */}
+                      <td className="px-4 py-3.5">
+                        <div className="font-bold text-foreground text-sm">
+                          {s.name}
+                        </div>
+                        {s.type === "hotel" && s.hotelMeta?.hotelAddress && (
+                          <div className="flex items-center gap-1 text-[11px] text-text-3 truncate max-w-xs mt-0.5">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{s.hotelMeta.hotelAddress}</span>
+                          </div>
+                        )}
+                        {s.sla && (
+                          <span className="text-[10px] text-text-3 italic block mt-0.5 truncate max-w-xs">
+                            SLA: {s.sla}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Tipo */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-semibold border ${typeCfg.color}`}
+                        >
+                          <TypeIcon className="h-3.5 w-3.5" />
+                          {typeCfg.label}
+                        </span>
+                      </td>
+
+                      {/* Contacto */}
+                      <td className="px-4 py-3.5 text-xs">
+                        {s.contact?.name || s.contact?.phone || s.contact?.email ? (
+                          <div className="space-y-0.5 max-w-[220px]">
+                            {s.contact.name && (
+                              <div className="font-semibold text-text-2 truncate">
+                                {s.contact.name}
+                              </div>
+                            )}
+                            {s.contact.phone && (
+                              <div className="flex items-center gap-1 text-text-3 text-[11px]">
+                                <Phone className="h-3 w-3 shrink-0" />
+                                <a
+                                  href={`tel:${s.contact.phone}`}
+                                  className="hover:underline hover:text-foreground truncate"
+                                >
+                                  {s.contact.phone}
+                                </a>
+                              </div>
+                            )}
+                            {s.contact.email && (
+                              <div className="flex items-center gap-1 text-text-3 text-[11px]">
+                                <Mail className="h-3 w-3 shrink-0" />
+                                <a
+                                  href={`mailto:${s.contact.email}`}
+                                  className="hover:underline hover:text-foreground truncate"
+                                >
+                                  {s.contact.email}
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-text-3 italic text-[11px]">Sin contacto</span>
+                        )}
+                      </td>
+
+                      {/* Ciudades */}
+                      <td className="px-4 py-3.5 max-w-[200px]">
+                        {s.operatingCities && s.operatingCities.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {s.operatingCities.map((city) => (
+                              <span
+                                key={city}
+                                className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-text-3 font-medium"
+                              >
+                                {city}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-text-3 italic text-[11px]">Nacional / General</span>
+                        )}
+                      </td>
+
+                      {/* Comisión */}
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right font-bold text-foreground">
+                        {s.commission !== null && s.commission !== undefined ? (
+                          <Badge variant="secondary" className="font-semibold">
+                            {s.commission}%
+                          </Badge>
+                        ) : (
+                          <span className="text-text-3">—</span>
+                        )}
+                      </td>
+
+                      {/* Calificación */}
+                      <td className="px-4 py-3.5 whitespace-nowrap text-center">
+                        {s.rating ? (
+                          <div className="flex items-center justify-center gap-0.5">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-3 w-3 ${
+                                  star <= s.rating!
+                                    ? "fill-amber-400 text-amber-500"
+                                    : "text-muted-foreground/30"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-text-3">—</span>
+                        )}
+                      </td>
+
+                      {/* Estado */}
+                      <td className="px-4 py-3.5 whitespace-nowrap text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
+                            s.active ? "text-emerald-500" : "text-text-3"
+                          }`}
+                        >
+                          {s.active ? (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5" />
+                          )}
+                          {s.active ? "Activo" : "Inactivo"}
+                        </span>
+                      </td>
+
+                      {/* Acciones */}
+                      <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setModalSupplier(s)}
+                            className="h-8 px-2 text-xs"
+                            title="Editar proveedor"
+                          >
+                            <Edit2 className="h-3.5 w-3.5 mr-1" />
+                            Editar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={deletingId === s.id}
+                            onClick={() => setConfirmSupplierId(s.id)}
+                            className="h-8 px-2 text-xs text-danger-text hover:bg-danger-tint"
+                            title="Eliminar proveedor"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1" />
+                            Eliminar
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
+          /* Vista Cuadrícula (Grid) */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {suppliers.map((s) => {
+            {sortedSuppliers.map((s) => {
               const typeCfg = TYPE_CONFIG[s.type] ?? TYPE_CONFIG.other;
               const TypeIcon = typeCfg.icon;
 
@@ -391,6 +750,7 @@ export function SupplierListClient() {
       {modalSupplier !== undefined && (
         <SupplierModal
           supplier={modalSupplier}
+          existingSuppliers={suppliers}
           onClose={() => setModalSupplier(undefined)}
           onSaved={(saved) => {
             setSuppliers((prev) => {

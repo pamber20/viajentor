@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { serializeSupplier } from "@/server/travel/suppliers";
+import { isDuplicateSupplierName, serializeSupplier } from "@/server/travel/suppliers";
 
 describe("travel suppliers service", () => {
   it("serializa un registro de base de datos a formato de dominio TravelSupplier", () => {
@@ -51,5 +51,56 @@ describe("travel suppliers service", () => {
     expect(supplier.hotelMeta?.checkInTime).toBe("15:00");
     expect(supplier.createdAt).toBe("2026-05-10T12:00:00.000Z");
     expect(supplier.updatedAt).toBe("2026-05-10T12:00:00.000Z");
+  });
+
+  describe("validación de proveedores duplicados por tipo de servicio", () => {
+    const existing = [
+      { id: "sup_1", name: "Decameron Barú", type: "hotel" },
+      { id: "sup_2", name: "Avianca", type: "airline" },
+      { id: "sup_3", name: "Nautica Tours", type: "operator" },
+    ];
+
+    it("detecta duplicado exacto para el mismo tipo de servicio", () => {
+      const dup = isDuplicateSupplierName(existing, {
+        name: "Decameron Barú",
+        type: "hotel",
+      });
+      expect(dup).toBe(true);
+    });
+
+    it("detecta duplicado con diferencias de mayúsculas y espacios en blanco", () => {
+      const dup = isDuplicateSupplierName(existing, {
+        name: "   decameron barú   ",
+        type: "hotel",
+      });
+      expect(dup).toBe(true);
+    });
+
+    it("permite el mismo nombre si el tipo de servicio es diferente", () => {
+      // Por ejemplo un operador llamado "Decameron Barú" no choca con el hotel
+      const dup = isDuplicateSupplierName(existing, {
+        name: "Decameron Barú",
+        type: "operator",
+      });
+      expect(dup).toBe(false);
+    });
+
+    it("no marca duplicado cuando el proveedor se edita a sí mismo (mismo id)", () => {
+      const dup = isDuplicateSupplierName(existing, {
+        id: "sup_1",
+        name: "Decameron Barú",
+        type: "hotel",
+      });
+      expect(dup).toBe(false);
+    });
+
+    it("detecta duplicado al editar un proveedor con el nombre de otro existente", () => {
+      const dup = isDuplicateSupplierName(existing, {
+        id: "sup_2", // sup_2 es Avianca
+        name: "Decameron Barú",
+        type: "hotel",
+      });
+      expect(dup).toBe(true);
+    });
   });
 });
