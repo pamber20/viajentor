@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateDetailedQuoteTotals,
+  calculatePackageDisplayDays,
   distributePaymentToInstallments,
+  extractPackageServices,
   generateAutoInstallments,
   getProfitabilityDivisor,
   type PricingQuoteInput,
@@ -114,5 +116,63 @@ describe("Travel Pricing Engine", () => {
     expect(schedule[2]?.amount).toBe(333334); // suma exactamente 1000000
     expect(schedule.reduce((sum, s) => sum + s.amount, 0)).toBe(1000000);
     expect(schedule[0]?.dueDate).toBe("2026-11-01");
+  });
+
+  describe("extractPackageServices y calculatePackageDisplayDays", () => {
+    it("detecta asistencia médica tanto por ítem de itinerario como por inclusiones", () => {
+      // 1. Paquete con asistencia en inclusiones (como Punta Cana al atardecer)
+      const pkgWithInclusions = {
+        days: [],
+        medicalAssistance: 0,
+        inclusions: "Tiquetes ida y regreso\nAlojamiento todo incluido\nTraslados aeropuerto-hotel\nTarjeta de asistencia médica",
+      };
+      const services1 = extractPackageServices(pkgWithInclusions);
+      expect(services1.hasAssistance).toBe(true);
+      expect(services1.hasFlight).toBe(true);
+      expect(services1.hasHotel).toBe(true);
+      expect(services1.hasTransfers).toBe(true);
+
+      // 2. Paquete con ítem de itinerario tipo Insurance
+      const pkgWithItem = {
+        days: [
+          {
+            id: "d1",
+            dayNumber: 1,
+            items: [
+              {
+                id: "i1",
+                type: "Insurance" as const,
+                title: "Asistencia Médica",
+                description: "",
+                netPrice: 50000,
+                markup: 0,
+                totalPrice: 50000,
+              },
+            ],
+          },
+        ],
+        medicalAssistance: 0,
+        inclusions: "",
+      };
+      const services2 = extractPackageServices(pkgWithItem);
+      expect(services2.hasAssistance).toBe(true);
+    });
+
+    it("calcula correctamente los días de viaje en paquetes (4 noches = 5 días)", () => {
+      // Caso 1: 4 noches y días vacío o con 1 solo bloque inicial
+      expect(calculatePackageDisplayDays({ nights: 4, days: [] })).toBe(5);
+      expect(calculatePackageDisplayDays({ nights: 4, days: [{ id: "d1" }] })).toBe(5);
+
+      // Caso 2: 4 noches y días con 5 bloques de itinerario completos
+      expect(
+        calculatePackageDisplayDays({
+          nights: 4,
+          days: [{ id: "d1" }, { id: "d2" }, { id: "d3" }, { id: "d4" }, { id: "d5" }],
+        })
+      ).toBe(5);
+
+      // Caso 3: 0 noches (pasadía)
+      expect(calculatePackageDisplayDays({ nights: 0, days: [{ id: "d1" }] })).toBe(1);
+    });
   });
 });

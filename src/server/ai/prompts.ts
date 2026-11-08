@@ -1,4 +1,5 @@
 import type { schema } from "@/lib/db";
+import { calculatePackageDisplayDays } from "@/lib/travel/pricing";
 import type { TravelPackageDto } from "@/server/travel/packages";
 
 type AgentProfile = typeof schema.agentProfile.$inferSelect;
@@ -27,7 +28,8 @@ export function renderPackagesCatalog(packages?: TravelPackageDto[]): string | n
       ? `${pkg.originCity} (${pkg.departureAirport || "aeropuerto"})`
       : "Ciudad base";
     const dest = `${pkg.destination} (${pkg.arrivalAirport || "aeropuerto"})`;
-    const duracion = `${pkg.days?.length || (pkg.nights ? pkg.nights + 1 : 1)} días / ${pkg.nights} noches`;
+    const displayDays = calculatePackageDisplayDays(pkg);
+    const duracion = `${displayDays} días / ${pkg.nights} noches`;
     const fechas = `${pkg.startDate} al ${pkg.endDate} (${duracion})`;
     const deposito =
       pkg.minimumDeposit > 0

@@ -3,7 +3,10 @@ import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { normalizeText } from "@/lib/search";
-import { calculateDetailedQuoteTotals } from "@/lib/travel/pricing";
+import {
+  calculateDetailedQuoteTotals,
+  extractPackageServices,
+} from "@/lib/travel/pricing";
 import type {
   TravelCurrency,
   TravelDay,
@@ -83,13 +86,13 @@ export function serializePackage(row: PackageRow): TravelPackageDto {
     days,
   });
 
-  const hasFlight = days.some((d) => d.items?.some((i) => i.type === "Flight"));
-  const hasHotel = Boolean(
-    row.selectedHotelId || days.some((d) => d.items?.some((i) => i.type === "Hotel"))
-  );
-  const hasTransfers = days.some((d) => d.items?.some((i) => i.type === "Transfer"));
-  const hasActivities = days.some((d) => d.items?.some((i) => i.type === "Activity"));
-  const hasAssistance = medicalAssistance > 0;
+  const services = extractPackageServices({
+    days,
+    selectedHotelId: row.selectedHotelId,
+    medicalAssistance,
+    inclusions: row.inclusions,
+    flightType: row.flightType,
+  });
 
   return {
     id: row.id,
@@ -124,13 +127,7 @@ export function serializePackage(row: PackageRow): TravelPackageDto {
     policies: row.policies,
     status: (row.status as PackageStatus) ?? "active",
     totals,
-    services: {
-      hasFlight,
-      hasHotel,
-      hasTransfers,
-      hasActivities,
-      hasAssistance,
-    },
+    services,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

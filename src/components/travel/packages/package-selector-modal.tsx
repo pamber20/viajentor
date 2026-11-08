@@ -19,7 +19,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatCurrency } from "@/lib/travel/pricing";
+import {
+  calculatePackageDisplayDays,
+  extractPackageServices,
+  formatCurrency,
+} from "@/lib/travel/pricing";
 import type { TravelPackageDto } from "@/server/travel/packages";
 
 interface PackageSelectorModalProps {
@@ -158,20 +162,9 @@ export function PackageSelectorModal({
                 const totalChildren = pkg.childPassengers || 0;
                 const totalPax = totalAdults + totalChildren;
 
-                // Conteo de servicios
-                const hasFlights = pkg.days.some((d) =>
-                  d.items.some((i) => i.type === "Flight")
-                );
-                const hasHotels =
-                  pkg.selectedHotelId ||
-                  pkg.days.some((d) => d.items.some((i) => i.type === "Hotel"));
-                const hasTransfers = pkg.days.some((d) =>
-                  d.items.some((i) => i.type === "Transfer")
-                );
-                const hasActivities = pkg.days.some((d) =>
-                  d.items.some((i) => i.type === "Activity")
-                );
-                const hasAssistance = pkg.medicalAssistance > 0;
+                // Servicios incluidos mediante detección multifuente
+                const services = extractPackageServices(pkg);
+                const displayDays = calculatePackageDisplayDays(pkg);
 
                 return (
                   <div
@@ -214,7 +207,7 @@ export function PackageSelectorModal({
                         <div className="flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span>
-                            {pkg.startDate} al {pkg.endDate} ({pkg.days?.length || (pkg.nights ? pkg.nights + 1 : 1)} días / {pkg.nights} noches)
+                            {pkg.startDate} al {pkg.endDate} ({displayDays} días / {pkg.nights} noches)
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -228,29 +221,29 @@ export function PackageSelectorModal({
 
                       {/* Iconos de servicios */}
                       <div className="flex flex-wrap items-center gap-1.5 py-2 border-t border-border/60">
-                        {hasFlights && (
+                        {services.hasFlight && (
                           <span className="inline-flex items-center gap-1 text-[11px] bg-sky-500/10 text-sky-700 px-2 py-0.5 rounded font-medium">
                             <Plane className="h-3 w-3" /> Vuelos
                           </span>
                         )}
-                        {hasHotels && (
+                        {services.hasHotel && (
                           <span className="inline-flex items-center gap-1 text-[11px] bg-purple-500/10 text-purple-700 px-2 py-0.5 rounded font-medium">
                             <Hotel className="h-3 w-3" /> Hotel
                           </span>
                         )}
-                        {hasTransfers && (
+                        {services.hasTransfers && (
                           <span className="inline-flex items-center gap-1 text-[11px] bg-amber-500/10 text-amber-700 px-2 py-0.5 rounded font-medium">
                             <Car className="h-3 w-3" /> Traslados
                           </span>
                         )}
-                        {hasActivities && (
+                        {services.hasActivities && (
                           <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-500/10 text-emerald-700 px-2 py-0.5 rounded font-medium">
                             <Compass className="h-3 w-3" /> Tours
                           </span>
                         )}
-                        {hasAssistance && (
+                        {services.hasAssistance && (
                           <span className="inline-flex items-center gap-1 text-[11px] bg-rose-500/10 text-rose-700 px-2 py-0.5 rounded font-medium">
-                            <ShieldCheck className="h-3 w-3" /> Asistencia
+                            <ShieldCheck className="h-3 w-3" /> Asistencia Seguro
                           </span>
                         )}
                       </div>

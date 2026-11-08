@@ -413,6 +413,81 @@ export function formatCurrency(amount: number, currency: string = "COP"): string
   }).format(rounded);
 }
 
+export interface ExtractedPackageServices {
+  hasFlight: boolean;
+  hasHotel: boolean;
+  hasTransfers: boolean;
+  hasActivities: boolean;
+  hasAssistance: boolean;
+}
+
+export function extractPackageServices(pkg: {
+  days?: TravelDay[] | null;
+  selectedHotelId?: string | null;
+  medicalAssistance?: number | null;
+  inclusions?: string | null;
+  flightType?: string | null;
+  services?: Partial<ExtractedPackageServices> | null;
+}): ExtractedPackageServices {
+  const days = pkg.days ?? [];
+  const inclusions = (pkg.inclusions ?? "").toLowerCase();
+
+  const hasFlight = Boolean(
+    pkg.services?.hasFlight ||
+    (pkg.flightType && pkg.flightType !== "none") ||
+    days.some((d) => d.items?.some((i) => i.type === "Flight")) ||
+    /(?:vuelo|tiquete|a[eé]reo)/i.test(inclusions)
+  );
+
+  const hasHotel = Boolean(
+    pkg.services?.hasHotel ||
+    pkg.selectedHotelId ||
+    days.some((d) => d.items?.some((i) => i.type === "Hotel")) ||
+    /(?:hotel|alojamiento|hospedaje|resort|habitaci[oó]n)/i.test(inclusions)
+  );
+
+  const hasTransfers = Boolean(
+    pkg.services?.hasTransfers ||
+    days.some((d) => d.items?.some((i) => i.type === "Transfer")) ||
+    /(?:traslado|transfer)/i.test(inclusions)
+  );
+
+  const hasActivities = Boolean(
+    pkg.services?.hasActivities ||
+    days.some((d) => d.items?.some((i) => i.type === "Activity")) ||
+    /(?:tour|actividad|excursi[oó]n|paseo)/i.test(inclusions)
+  );
+
+  const hasAssistance = Boolean(
+    pkg.services?.hasAssistance ||
+    (pkg.medicalAssistance !== undefined && pkg.medicalAssistance !== null && pkg.medicalAssistance > 0) ||
+    days.some((d) => d.items?.some((i) => i.type === "Insurance")) ||
+    /(?:asistencia|seguro|tarjeta de asistencia|m[eé]dic)/i.test(inclusions)
+  );
+
+  return {
+    hasFlight,
+    hasHotel,
+    hasTransfers,
+    hasActivities,
+    hasAssistance,
+  };
+}
+
+export function calculatePackageDisplayDays(pkg: {
+  nights?: number | null;
+  days?: Array<unknown> | null;
+}): number {
+  const nights = pkg.nights ?? 0;
+  if (nights > 0) {
+    if (pkg.days && pkg.days.length > 1) {
+      return pkg.days.length;
+    }
+    return nights + 1;
+  }
+  return pkg.days?.length || 1;
+}
+
 export function generateAutoInstallments(
   totalAmount: number,
   numInstallments: number,
