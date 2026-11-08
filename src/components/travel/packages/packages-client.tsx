@@ -399,7 +399,7 @@ export function PackagesClient() {
                         {pkg.startDate} al {pkg.endDate}
                       </span>
                       <span className="text-muted-foreground">
-                        ({pkg.nights} noches)
+                        ({pkg.days?.length || (pkg.nights ? pkg.nights + 1 : 1)} días / {pkg.nights} noches)
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">

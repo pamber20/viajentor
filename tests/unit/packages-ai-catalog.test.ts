@@ -89,9 +89,9 @@ describe("Catálogo de Paquetes Turísticos para el Agente de IA", () => {
         },
       ],
       options: {
-        A: {} as Record<string, unknown>,
-        B: {} as Record<string, unknown>,
-        C: {} as Record<string, unknown>,
+        A: {} as any,
+        B: {} as any,
+        C: {} as any,
       },
     },
     services: {
@@ -110,7 +110,7 @@ describe("Catálogo de Paquetes Turísticos para el Agente de IA", () => {
     expect(catalog).not.toBeNull();
     expect(catalog).toContain('Punta Cana al atardecer');
     expect(catalog).toContain("Medellín (MDE) ➔ Punta Cana (PUJ)");
-    expect(catalog).toContain("2027-05-01 al 2027-05-05 (4 noches)");
+    expect(catalog).toContain("2027-05-01 al 2027-05-05 (5 días / 4 noches)");
     expect(catalog).toContain("Separa con $500.000 COP por persona (abono mes a mes)");
     expect(catalog).toContain("VIK Arena Blanca");
     expect(catalog).toContain("Bahía Príncipe Grand Punta Cana");

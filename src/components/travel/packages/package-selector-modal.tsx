@@ -214,7 +214,7 @@ export function PackageSelectorModal({
                         <div className="flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span>
-                            {pkg.startDate} al {pkg.endDate} ({pkg.nights} noches)
+                            {pkg.startDate} al {pkg.endDate} ({pkg.days?.length || (pkg.nights ? pkg.nights + 1 : 1)} días / {pkg.nights} noches)
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">

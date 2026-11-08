@@ -88,7 +88,7 @@ describe("YCloud Client", () => {
 
       expect(id).toBe("wamid_sent_123");
       expect(global.fetch).toHaveBeenCalledWith(
-        "https://api.ycloud.com/v2/whatsapp/messages/send",
+        "https://api.ycloud.com/v2/whatsapp/messages",
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({

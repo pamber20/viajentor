@@ -56,7 +56,7 @@ export function QuotePreviewModal({
       `👤 Pasajero principal: ${quote.clientName}`,
       `👥 Pasajeros: ${quote.passengers} ${quote.childPassengers ? `(+${quote.childPassengers} niños)` : ""}`,
       quote.startDate ? `📅 Fechas: ${quote.startDate} al ${quote.endDate ?? ""}` : "",
-      quote.nights ? `🌙 Noches: ${quote.nights}` : "",
+      quote.nights ? `🌙 Duración: ${quote.days?.length || quote.nights + 1} Días / ${quote.nights} Noches` : "",
       "",
       `*RESUMEN DE ITINERARIO:*`,
     ];

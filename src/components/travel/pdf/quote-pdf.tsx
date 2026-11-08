@@ -712,7 +712,7 @@ export function QuotePDF({ quote, agency, totals: passedTotals, currentUser, pay
           {quote.isBooking ? quote.bookingNumber || quote.quoteNumber : quote.quoteNumber}
         </Text>
         <Text style={[styles.docSubTitle, { color: pdfTextSecondary }]}>
-          Destino: {quote.destination} | {quote.passengers} Adultos{" "}
+          Destino: {quote.destination} | {quote.days?.length || (quote.nights ? quote.nights + 1 : 1)} Días / {quote.nights} Noches | {quote.passengers} Adultos{" "}
           {quote.childPassengers > 0 ? `+ ${quote.childPassengers} Niños` : ""}
         </Text>
 

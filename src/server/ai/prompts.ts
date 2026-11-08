@@ -27,7 +27,8 @@ export function renderPackagesCatalog(packages?: TravelPackageDto[]): string | n
       ? `${pkg.originCity} (${pkg.departureAirport || "aeropuerto"})`
       : "Ciudad base";
     const dest = `${pkg.destination} (${pkg.arrivalAirport || "aeropuerto"})`;
-    const fechas = `${pkg.startDate} al ${pkg.endDate} (${pkg.nights} noches)`;
+    const duracion = `${pkg.days?.length || (pkg.nights ? pkg.nights + 1 : 1)} días / ${pkg.nights} noches`;
+    const fechas = `${pkg.startDate} al ${pkg.endDate} (${duracion})`;
     const deposito =
       pkg.minimumDeposit > 0
         ? `Separa con $${pkg.minimumDeposit.toLocaleString("es-CO")} ${pkg.currency} por persona (abono mes a mes)`

@@ -91,6 +91,9 @@ export function PackageBuilder({
   const [startDate, setStartDate] = useState(initialPackage?.startDate ?? "");
   const [endDate, setEndDate] = useState(initialPackage?.endDate ?? "");
   const [nights, setNights] = useState<number>(initialPackage?.nights ?? 4);
+  const [daysCount, setDaysCount] = useState<number>(
+    initialPackage?.days?.length || (initialPackage?.nights ? initialPackage.nights + 1 : 5)
+  );
   const [passengers, setPassengers] = useState<number>(initialPackage?.passengers ?? 2);
   const [childPassengers, setChildPassengers] = useState<number>(initialPackage?.childPassengers ?? 0);
   const [rooms, setRooms] = useState<number>(1);
@@ -302,37 +305,72 @@ export function PackageBuilder({
         newEndDate = val;
         setEndDate(val);
       }
-      const s = new Date(val);
-      const e = new Date(newEndDate);
-      const diff = Math.ceil((e.getTime() - s.getTime()) / (1000 * 3600 * 24));
-      const calculatedNights = diff > 0 ? diff : 1;
+      const s = new Date(val + "T00:00:00");
+      const e = new Date(newEndDate + "T00:00:00");
+      const diff = Math.round((e.getTime() - s.getTime()) / (1000 * 3600 * 24));
+      const calculatedNights = diff >= 0 ? diff : 1;
+      const calculatedDays = calculatedNights + 1;
       setNights(calculatedNights);
-      adjustDaysCount(calculatedNights + 1);
+      setDaysCount(calculatedDays);
+      adjustDaysCount(calculatedDays);
     }
   }
 
   function handleEndDateChange(val: string) {
     setEndDate(val);
     if (startDate && val) {
-      const s = new Date(startDate);
-      const e = new Date(val);
-      const diff = Math.ceil((e.getTime() - s.getTime()) / (1000 * 3600 * 24));
-      const calculatedNights = diff > 0 ? diff : 1;
+      const s = new Date(startDate + "T00:00:00");
+      const e = new Date(val + "T00:00:00");
+      const diff = Math.round((e.getTime() - s.getTime()) / (1000 * 3600 * 24));
+      const calculatedNights = diff >= 0 ? diff : 1;
+      const calculatedDays = calculatedNights + 1;
       setNights(calculatedNights);
-      adjustDaysCount(calculatedNights + 1);
+      setDaysCount(calculatedDays);
+      adjustDaysCount(calculatedDays);
     }
   }
 
   function handleNightsChange(num: number) {
-    setNights(num);
-    adjustDaysCount(num + 1);
-    if (startDate && num > 0 && flightType !== "one-way") {
-      const s = new Date(startDate);
-      s.setDate(s.getDate() + num);
+    const validNights = Math.max(0, num);
+    setNights(validNights);
+    const calculatedDays = validNights + 1;
+    setDaysCount(calculatedDays);
+    adjustDaysCount(calculatedDays);
+    if (startDate && validNights >= 0 && flightType !== "one-way") {
+      const s = new Date(startDate + "T00:00:00");
+      s.setDate(s.getDate() + validNights);
       const yyyy = s.getFullYear();
       const mm = String(s.getMonth() + 1).padStart(2, "0");
       const dd = String(s.getDate()).padStart(2, "0");
       setEndDate(`${yyyy}-${mm}-${dd}`);
+    }
+  }
+
+  function handleDaysChange(num: number) {
+    const validDays = Math.max(1, num);
+    setDaysCount(validDays);
+    const calculatedNights = Math.max(0, validDays - 1);
+    setNights(calculatedNights);
+    adjustDaysCount(validDays);
+    if (startDate && flightType !== "one-way") {
+      const s = new Date(startDate + "T00:00:00");
+      s.setDate(s.getDate() + calculatedNights);
+      const yyyy = s.getFullYear();
+      const mm = String(s.getMonth() + 1).padStart(2, "0");
+      const dd = String(s.getDate()).padStart(2, "0");
+      setEndDate(`${yyyy}-${mm}-${dd}`);
+    }
+  }
+
+  function handleDaysBlur() {
+    if (daysCount < 1) {
+      handleDaysChange(1);
+    }
+  }
+
+  function handleNightsBlur() {
+    if (nights < 0) {
+      handleNightsChange(1);
     }
   }
 
@@ -1173,8 +1211,8 @@ export function PackageBuilder({
                   </div>
                 </div>
 
-                {/* Fechas, Noches, Pasajeros y Moneda */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* Fechas, Días, Noches, Pasajeros y Moneda */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-text-2">Fecha Ida *</label>
                     <Input
@@ -1198,12 +1236,23 @@ export function PackageBuilder({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-text-2">Noches de Estadía</label>
+                    <label className="text-xs font-semibold text-text-2">Días de Viaje</label>
                     <Input
                       type="number"
                       min="1"
+                      value={daysCount === 0 ? "" : daysCount}
+                      onChange={(e) => handleDaysChange(Number(e.target.value))}
+                      onBlur={handleDaysBlur}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Noches de Estadía</label>
+                    <Input
+                      type="number"
+                      min="0"
                       value={nights === 0 ? "" : nights}
                       onChange={(e) => handleNightsChange(Number(e.target.value))}
+                      onBlur={handleNightsBlur}
                     />
                   </div>
                   <div className="space-y-1">
