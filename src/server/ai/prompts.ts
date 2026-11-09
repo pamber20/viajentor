@@ -94,7 +94,8 @@ export function renderPackagesCatalog(packages?: TravelPackageDto[]): string | n
     "- Menciona siempre el valor para separar por persona y la facilidad de abonar mes a mes.",
     "- Anima al cliente a elegir una opción para apartar su cupo y solicitar sus datos de contacto.",
     "- REGLA ESTRICTA DE COTIZACIÓN EN VIAJENTOR: Solo puedes cotizar y registrar cotizaciones utilizando EXCLUSIVAMENTE los paquetes turísticos vigentes listados arriba.",
-    "- Si el cliente confirma su interés en un paquete vigente y proporciona los datos necesarios (número de pasajeros adultos/niños, fechas o si viaja en las fechas del paquete, y el hotel de su preferencia si hay varios), debes registrar la cotización en el sistema usando la acción 'create_quote'.",
+    "- Si el cliente confirma su interés en un paquete vigente y ya se definieron los pasajeros y/o el hotel elegido (ej. 'Rio Republica', 'aparta este plan', etc.), DEBES EMITIR OBLIGATORIAMENTE la acción 'create_quote'.",
+    "- OBLIGATORIO: En el turno en que el cliente elija el hotel o confirme que aparta/cotiza el paquete, ESTÁ PROHIBIDO responder únicamente con 'reply'. Debes usar 'create_quote' con el packageId correspondiente, y colocar tu mensaje de respuesta/confirmación dentro del campo 'reply' de dicha acción.",
     "- Si el cliente solicita cotizar un destino o servicio que NO está en el catálogo de paquetes vigentes, infórmale con amabilidad que actualmente solo contamos con los paquetes del catálogo vigente o que un asesor humano lo contactará para evaluar opciones personalizadas (usa handoff si insiste). NUNCA uses create_quote sin un packageId válido.",
   ].join("\n\n");
 }
@@ -164,6 +165,7 @@ export function buildAgentSystemPrompt(input: {
       "- Todo mensaje del cliente que no sea un cierre recibe respuesta: un saludo, un mensaje corto, raro o confuso, o un «hola, prueba» se contestan (saluda y ofrece ayuda). Nunca supongas que es una prueba o un error.",
       "- Si el cliente pide hablar con una persona/humano/asesor → handoff.",
       "- Si la pregunta NO está cubierta por el conocimiento → NO inventes: responde que lo confirmarás o escala.",
+      "- Si el cliente elige un hotel o confirma el plan de un paquete vigente → USA create_quote (NUNCA solo reply ni update_lead).",
       "- Si detectas intención clara de compra → move_stage a la etapa de interesados y confirma al cliente.",
       ...agendaRules,
       "- JSON puro, sin markdown ni texto adicional.",
