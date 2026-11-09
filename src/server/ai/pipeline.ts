@@ -32,6 +32,7 @@ import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
 import { getPackage, listPackages } from "@/server/travel/packages";
 import { createQuote } from "@/server/travel/quotes";
+import { prepareQuoteDaysFromPackage } from "@/lib/travel/pricing";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -616,10 +617,32 @@ async function handleCreateQuoteAction(params: {
       s.name.toLowerCase().includes("cotizad")
     );
 
-    // Días y selección de hotel heredados del paquete turístico
-    const selectedHotel = action.selectedHotelId || pkg.selectedHotelId || null;
+    // Resolver hotel seleccionado (por ID directo o por coincidencia de título)
+    let selectedHotel = action.selectedHotelId || pkg.selectedHotelId || null;
+    if (action.selectedHotelId && pkg.totals?.byHotel) {
+      const matchById = pkg.totals.byHotel.find((h) => h.hotelId === action.selectedHotelId);
+      if (!matchById) {
+        const normSearch = action.selectedHotelId.toLowerCase().trim();
+        const matchByTitle = pkg.totals.byHotel.find((h) =>
+          h.hotelTitle.toLowerCase().includes(normSearch)
+        );
+        if (matchByTitle) {
+          selectedHotel = matchByTitle.hotelId;
+        }
+      }
+    }
+
     const passengers = Math.max(1, action.passengers ?? pkg.passengers ?? 1);
     const childPassengers = Math.max(0, action.childPassengers ?? pkg.childPassengers ?? 0);
+
+    // Reescalar y filtrar los ítems de los días según los pasajeros reales y el hotel elegido
+    const preparedDays = prepareQuoteDaysFromPackage({
+      days: pkg.days ?? [],
+      passengers,
+      childPassengers,
+      selectedHotelId: selectedHotel,
+      nights: pkg.nights,
+    });
 
     const quote = await createQuote({
       organizationId,
@@ -650,7 +673,7 @@ async function handleCreateQuoteAction(params: {
       profitability: pkg.profitability,
       freelanceCommission: pkg.freelanceCommission,
       selectedHotelId: selectedHotel,
-      days: pkg.days ?? [],
+      days: preparedDays,
       amortizationSchedule: pkg.amortizationSchedule ?? [],
       inclusions: pkg.inclusions ?? null,
       exclusions: pkg.exclusions ?? null,

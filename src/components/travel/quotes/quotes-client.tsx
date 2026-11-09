@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
-import { formatCurrency } from "@/lib/travel/pricing";
+import { calculatePackageDisplayDays, formatCurrency } from "@/lib/travel/pricing";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
 import { QuoteBuilder } from "./quote-builder";
 import { QuotePreviewModal } from "./quote-preview";
@@ -272,7 +272,7 @@ export function QuotesClient({
                       <div className="flex items-center gap-3 text-text-3 text-[11px]">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3 shrink-0" />
-                          {q.nights} noches ({q.days.length} días)
+                          {q.nights} noches ({calculatePackageDisplayDays(q)} días)
                         </span>
                         <span className="flex items-center gap-1">
                           <Users className="h-3 w-3 shrink-0" />

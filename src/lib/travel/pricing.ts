@@ -527,3 +527,104 @@ export function generateAutoInstallments(
 
   return installments;
 }
+
+/**
+ * Prepara y reescala los días e itinerario de un paquete turístico al convertirse
+ * en una cotización para un número específico de adultos y niños, filtrando además
+ * el hotel seleccionado si el cliente confirmó uno en particular.
+ */
+export function prepareQuoteDaysFromPackage(params: {
+  days: TravelDay[];
+  passengers: number;
+  childPassengers: number;
+  selectedHotelId?: string | null;
+  nights?: number | null;
+}): TravelDay[] {
+  const {
+    days = [],
+    passengers = 1,
+    childPassengers = 0,
+    selectedHotelId,
+    nights = 0,
+  } = params;
+
+  // 1. Filtrar hotel si se especificó uno
+  let processedDays = days.map((day) => {
+    let items = day.items || [];
+    if (selectedHotelId) {
+      const hasSelectedHotel = items.some(
+        (item) => item.type === "Hotel" && item.id === selectedHotelId
+      );
+      if (hasSelectedHotel) {
+        items = items.filter(
+          (item) => item.type !== "Hotel" || item.id === selectedHotelId
+        );
+      }
+    }
+
+    // 2. Reescalar precios de cada ítem a los pasajeros confirmados
+    const updatedItems = items.map((item) => {
+      const shouldBePerPerson =
+        ["Flight", "Hotel", "Insurance", "Activity", "Transfer"].includes(item.type) ||
+        childPassengers > 0
+          ? true
+          : Boolean(item.pricePerPerson);
+
+      if (shouldBePerPerson) {
+        const netAdult =
+          item.netPriceAdult !== undefined
+            ? item.netPriceAdult
+            : item.netPrice || item.totalPrice || 0;
+        const netChild = item.netPriceChild || 0;
+        const markAdult =
+          item.markupAdult !== undefined
+            ? item.markupAdult
+            : item.markup || 0;
+        const markChild = item.markupChild || 0;
+
+        let calculatedNet = netAdult * passengers + netChild * childPassengers;
+        let calculatedMarkup = markAdult * passengers + markChild * childPassengers;
+
+        if (item.type === "Insurance") {
+          calculatedNet = netAdult * (passengers + childPassengers);
+          calculatedMarkup = markAdult * (passengers + childPassengers);
+        }
+
+        const calculatedTotal = calculatedNet + calculatedMarkup;
+
+        return {
+          ...item,
+          pricePerPerson: true,
+          netPriceAdult: netAdult,
+          netPriceChild: netChild,
+          markupAdult: markAdult,
+          markupChild: markChild,
+          netPrice: calculatedNet,
+          markup: calculatedMarkup,
+          totalPrice: calculatedTotal,
+        };
+      }
+
+      return item;
+    });
+
+    return {
+      ...day,
+      items: updatedItems,
+    };
+  });
+
+  // 3. Si hay noches especificadas y faltan días en el array, completar hasta (nights + 1)
+  const targetDaysCount = nights && nights > 0 ? nights + 1 : processedDays.length;
+  if (processedDays.length < targetDaysCount) {
+    const toAdd = targetDaysCount - processedDays.length;
+    const additionalDays: TravelDay[] = Array.from({ length: toAdd }).map((_, idx) => ({
+      id: `day_${processedDays.length + idx + 1}_${Date.now()}`,
+      dayNumber: processedDays.length + idx + 1,
+      items: [],
+    }));
+    processedDays = [...processedDays, ...additionalDays];
+  }
+
+  return processedDays;
+}
