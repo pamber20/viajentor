@@ -23,6 +23,18 @@ const baseActions = [
     reason: z.string().optional(),
     farewell: z.string().optional(),
   }),
+  z.object({
+    action: z.literal("create_quote"),
+    packageId: z.string().min(1),
+    selectedHotelId: z.string().optional(),
+    passengers: z.number().int().min(1).optional(),
+    childPassengers: z.number().int().min(0).optional(),
+    childAges: z.string().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    observations: z.string().optional(),
+    reply: z.string().min(1),
+  }),
 ] as const;
 
 /**
@@ -80,7 +92,8 @@ export function degradeAction(action: AgentActionType): AgentActionType {
   if (
     action.action === "move_stage" ||
     action.action === "offer_slots" ||
-    action.action === "book_slot"
+    action.action === "book_slot" ||
+    action.action === "create_quote"
   ) {
     return action.reply
       ? { action: "reply", text: action.reply }

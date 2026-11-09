@@ -30,7 +30,8 @@ import {
 import { agendaEnabled } from "@/server/agenda/flag";
 import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
-import { listPackages } from "@/server/travel/packages";
+import { getPackage, listPackages } from "@/server/travel/packages";
+import { createQuote } from "@/server/travel/quotes";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -372,6 +373,23 @@ export async function runAgentTurn(
       if (action.reply) await deliverReply(conversation, action.reply);
       return leido;
     }
+    case "create_quote": {
+      const quoteSaved = await handleCreateQuoteAction({
+        organizationId,
+        contactId: conversation.contactId,
+        action,
+      });
+      if (quoteSaved) {
+        publish(organizationId, {
+          type: "conversation.updated",
+          data: { conversation: { id: conversationId } },
+        });
+      }
+      if (action.reply) {
+        await deliverReply(conversation, action.reply);
+      }
+      return leido;
+    }
     case "handoff": {
       if (action.farewell) {
         await deliverReply(conversation, action.farewell);
@@ -544,4 +562,112 @@ async function appendLeadNote(
       updatedAt: new Date(),
     })
     .where(eq(schema.contact.id, contact.id));
+}
+
+/**
+ * Crea una cotización en Viajentor 2.0 a partir exclusivamente de un paquete turístico vigente.
+ */
+async function handleCreateQuoteAction(params: {
+  organizationId: string;
+  contactId: string;
+  action: Extract<AgentActionType, { action: "create_quote" }>;
+}): Promise<boolean> {
+  const { organizationId, contactId, action } = params;
+  try {
+    const pkg = await getPackage(organizationId, action.packageId);
+    if (!pkg || pkg.status !== "active") {
+      console.warn(
+        `[agente] create_quote rechazado: el paquete "${action.packageId}" no existe o no está activo.`
+      );
+      return false;
+    }
+
+    const db = getDb();
+    const contactRows = await db
+      .select({
+        id: schema.contact.id,
+        name: schema.contact.name,
+        phone: schema.contact.phone,
+        notes: schema.contact.notes,
+      })
+      .from(schema.contact)
+      .where(eq(schema.contact.id, contactId))
+      .limit(1);
+    const contact = contactRows[0];
+    if (!contact) {
+      console.warn(`[agente] create_quote rechazado: contacto ${contactId} no encontrado.`);
+      return false;
+    }
+
+    // Buscar si ya existe una etapa de 'Cotizado' en el pipeline
+    const stages = await db
+      .select({ id: schema.pipelineStage.id, name: schema.pipelineStage.name })
+      .from(schema.pipelineStage)
+      .where(
+        scoped(
+          schema.pipelineStage.organizationId,
+          organizationId,
+          eq(schema.pipelineStage.kind, "open")
+        )
+      )
+      .orderBy(asc(schema.pipelineStage.position));
+
+    const cotizadoStage = stages.find((s) =>
+      s.name.toLowerCase().includes("cotizad")
+    );
+
+    // Días y selección de hotel heredados del paquete turístico
+    const selectedHotel = action.selectedHotelId || pkg.selectedHotelId || null;
+    const passengers = Math.max(1, action.passengers ?? pkg.passengers ?? 1);
+    const childPassengers = Math.max(0, action.childPassengers ?? pkg.childPassengers ?? 0);
+
+    const quote = await createQuote({
+      organizationId,
+      contactId: contact.id,
+      clientName: contact.name || "Cliente",
+      clientPhone: contact.phone ?? null,
+      clientEmail: null,
+      originCity: pkg.originCity ?? null,
+      destination: pkg.destination,
+      departureAirport: pkg.departureAirport ?? null,
+      arrivalAirport: pkg.arrivalAirport ?? null,
+      flightType: pkg.flightType ?? "round-trip",
+      startDate: action.startDate || pkg.startDate || null,
+      endDate: action.endDate || pkg.endDate || null,
+      nights: pkg.nights ?? 0,
+      passengers,
+      childPassengers,
+      childAges: action.childAges ?? null,
+      rooms: Math.max(1, Math.ceil(passengers / 2)),
+      currency: pkg.currency,
+      exchangeRate: pkg.exchangeRate,
+      markupPercentage: pkg.markupPercentage,
+      taxes: pkg.taxes,
+      agencyCommission: pkg.agencyCommission,
+      minimumDeposit: pkg.minimumDeposit,
+      administrativeFee: pkg.administrativeFee,
+      medicalAssistance: pkg.medicalAssistance,
+      profitability: pkg.profitability,
+      freelanceCommission: pkg.freelanceCommission,
+      selectedHotelId: selectedHotel,
+      days: pkg.days ?? [],
+      amortizationSchedule: pkg.amortizationSchedule ?? [],
+      inclusions: pkg.inclusions ?? null,
+      exclusions: pkg.exclusions ?? null,
+      policies: pkg.policies ?? null,
+      pipelineStageId: cotizadoStage?.id ?? null,
+      observations: action.observations
+        ? `[Cotizado por Agente IA] Paquete: ${pkg.title}\n${action.observations}`
+        : `[Cotizado por Agente IA] Paquete: ${pkg.title}`,
+    });
+
+    // Registrar en notas del contacto
+    const nota = `Cotización #${quote.quoteNumber} generada por el Asistente IA para el paquete "${pkg.title}" (${passengers} adultos, ${childPassengers} niños).`;
+    await appendLeadNote(organizationId, contactId, nota);
+
+    return true;
+  } catch (err) {
+    console.error(`[agente] error al ejecutar create_quote:`, err);
+    return false;
+  }
 }

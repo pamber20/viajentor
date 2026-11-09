@@ -49,7 +49,8 @@ export function renderPackagesCatalog(packages?: TravelPackageDto[]): string | n
           if (childUnit !== null) {
             precioStr += ` | Niño: $${childUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
           }
-          return `    • Opción #${i + 1} - ${h.hotelTitle}: ${precioStr}`;
+          const hotelRef = h.hotelId ? ` [hotelId: "${h.hotelId}"]` : "";
+          return `    • Opción #${i + 1} - ${h.hotelTitle}${hotelRef}: ${precioStr}`;
         })
         .join("\n");
     } else {
@@ -71,7 +72,7 @@ export function renderPackagesCatalog(packages?: TravelPackageDto[]): string | n
     const pol = pkg.policies ? `  - Políticas: ${pkg.policies.replace(/\n+/g, " ")}` : null;
 
     return [
-      `[PAQUETE #${idx + 1}: "${pkg.title}"]`,
+      `[PAQUETE #${idx + 1}: "${pkg.title}" | packageId: "${pkg.id}"]`,
       `  - Trayecto: ${origin} ➔ ${dest}`,
       `  - Fechas: ${fechas}`,
       `  - Opciones de Hotel y Tarifas Unitarias:`,
@@ -92,6 +93,9 @@ export function renderPackagesCatalog(packages?: TravelPackageDto[]): string | n
     "- Si el cliente indica cuántos adultos y niños viajan, calcula y entrégale el valor total por cada hotel: (Adultos × Tarifa Adulto) + (Niños × Tarifa Niño).",
     "- Menciona siempre el valor para separar por persona y la facilidad de abonar mes a mes.",
     "- Anima al cliente a elegir una opción para apartar su cupo y solicitar sus datos de contacto.",
+    "- REGLA ESTRICTA DE COTIZACIÓN EN VIAJENTOR: Solo puedes cotizar y registrar cotizaciones utilizando EXCLUSIVAMENTE los paquetes turísticos vigentes listados arriba.",
+    "- Si el cliente confirma su interés en un paquete vigente y proporciona los datos necesarios (número de pasajeros adultos/niños, fechas o si viaja en las fechas del paquete, y el hotel de su preferencia si hay varios), debes registrar la cotización en el sistema usando la acción 'create_quote'.",
+    "- Si el cliente solicita cotizar un destino o servicio que NO está en el catálogo de paquetes vigentes, infórmale con amabilidad que actualmente solo contamos con los paquetes del catálogo vigente o que un asesor humano lo contactará para evaluar opciones personalizadas (usa handoff si insiste). NUNCA uses create_quote sin un packageId válido.",
   ].join("\n\n");
 }
 
@@ -153,6 +157,7 @@ export function buildAgentSystemPrompt(input: {
       '- {"action":"reply","text":"..."} — responder al cliente.',
       '- {"action":"update_lead","note":"...","reply":"..."} — guardar una nota del lead (si el cliente espera respuesta, incluye reply).',
       '- {"action":"move_stage","stage":"<nombre exacto de etapa>","reply":"..."} — mover el lead (si el cliente espera respuesta, incluye reply).',
+      '- {"action":"create_quote","packageId":"<packageId del paquete vigente>","selectedHotelId":"<opcional: hotelId>","passengers":1,"childPassengers":0,"reply":"..."} — guardar la cotización formal en Viajentor cuando el cliente confirme los datos faltantes (pasajeros, hotel o fechas) de un paquete vigente.',
       '- {"action":"handoff","reason":"...","farewell":"..."} — escalar a un humano (farewell opcional para despedirte).',
       ...agendaLines,
       "Reglas duras:",

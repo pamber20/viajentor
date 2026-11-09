@@ -722,8 +722,14 @@ export async function deleteQuote(input: {
   id: string;
 }): Promise<boolean> {
   const db = getDb();
-  const deleted = await db
-    .delete(schema.travelQuote)
+
+  // 1. Obtener la cotización antes de eliminarla para conocer su leadId
+  const [quote] = await db
+    .select({
+      id: schema.travelQuote.id,
+      leadId: schema.travelQuote.leadId,
+    })
+    .from(schema.travelQuote)
     .where(
       scoped(
         schema.travelQuote.organizationId,
@@ -731,9 +737,50 @@ export async function deleteQuote(input: {
         eq(schema.travelQuote.id, input.id)
       )
     )
-    .returning({ id: schema.travelQuote.id });
+    .limit(1);
 
-  return deleted.length > 0;
+  if (!quote) return false;
+
+  // 2. Eliminar la cotización
+  await db
+    .delete(schema.travelQuote)
+    .where(
+      scoped(
+        schema.travelQuote.organizationId,
+        input.organizationId,
+        eq(schema.travelQuote.id, input.id)
+      )
+    );
+
+  // 3. Si tenía un lead asociado en el pipeline, verificar si quedan más cotizaciones
+  if (quote.leadId) {
+    const remainingQuotes = await db
+      .select({ id: schema.travelQuote.id })
+      .from(schema.travelQuote)
+      .where(
+        scoped(
+          schema.travelQuote.organizationId,
+          input.organizationId,
+          eq(schema.travelQuote.leadId, quote.leadId)
+        )
+      )
+      .limit(1);
+
+    // Si ya no quedan cotizaciones asociadas a este lead, borrar el lead del pipeline
+    if (remainingQuotes.length === 0) {
+      await db
+        .delete(schema.lead)
+        .where(
+          scoped(
+            schema.lead.organizationId,
+            input.organizationId,
+            eq(schema.lead.id, quote.leadId)
+          )
+        );
+    }
+  }
+
+  return true;
 }
 
 /**

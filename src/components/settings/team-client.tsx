@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { UserPlus } from "lucide-react";
+import { Trash2, UserPlus } from "lucide-react";
 import { ContactAvatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/toast";
 
 type Member = {
   id: string;
@@ -18,6 +20,7 @@ type Member = {
 };
 
 export function TeamClient() {
+  const { toast } = useToast();
   const [members, setMembers] = useState<Member[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -25,6 +28,8 @@ export function TeamClient() {
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingMember, setDeletingMember] = useState<Member | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const refetch = useCallback(async () => {
     const res = await fetch("/api/settings/team").catch(() => null);
@@ -45,6 +50,30 @@ export function TeamClient() {
     setTempPassword(
       Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("")
     );
+  }
+
+  async function removeMember(member: Member) {
+    setIsDeleting(true);
+    try {
+      const res = await fetch("/api/settings/team", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: member.id }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        throw new Error(data?.error?.message ?? "Error al remover miembro");
+      }
+      toast(`Miembro "${member.name}" removido del equipo`, "info");
+      void refetch();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Error al remover miembro", "error");
+    } finally {
+      setIsDeleting(false);
+      setDeletingMember(null);
+    }
   }
 
   async function create() {
@@ -156,9 +185,39 @@ export function TeamClient() {
             <Badge variant={m.role === "owner" ? "default" : "secondary"}>
               {m.role === "owner" ? "Propietario" : "Miembro"}
             </Badge>
+            {m.role !== "owner" && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                title="Remover miembro del equipo"
+                onClick={() => setDeletingMember(m)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Remover miembro</span>
+              </Button>
+            )}
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        isOpen={Boolean(deletingMember)}
+        onClose={() => setDeletingMember(null)}
+        onConfirm={() => {
+          if (deletingMember) void removeMember(deletingMember);
+        }}
+        title="¿Remover miembro del equipo?"
+        message={
+          deletingMember
+            ? `¿Estás seguro de remover a "${deletingMember.name}" (${deletingMember.email}) de la agencia? Perderá el acceso de inmediato.`
+            : ""
+        }
+        confirmText="Remover miembro"
+        cancelText="Cancelar"
+        variant="danger"
+        loading={isDeleting}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { count, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { z } from "zod";
 import { apiError, parseBody, withAuth } from "@/lib/api";
 import { getAuth, runInternalSignup } from "@/lib/auth";
@@ -115,4 +115,62 @@ export const POST = withAuth(async (session, req: Request) => {
     .onConflictDoNothing();
 
   return Response.json({ ok: true }, { status: 201 });
+});
+
+const deleteSchema = z.object({
+  memberId: z.string().min(1),
+});
+
+/** Baja de miembro del equipo (owner only). */
+export const DELETE = withAuth(async (session, req: Request) => {
+  if (session.role !== "owner" && !session.isSuperAdmin) {
+    return apiError(403, "forbidden", "Solo el propietario puede remover miembros del equipo");
+  }
+
+  const body = await parseBody(req, deleteSchema);
+  if (!body.ok) return body.response;
+
+  const db = getDb();
+
+  // Buscar el miembro en la organización
+  const [targetMember] = await db
+    .select({
+      id: schema.member.id,
+      userId: schema.member.userId,
+      role: schema.member.role,
+    })
+    .from(schema.member)
+    .where(
+      scoped(
+        schema.member.organizationId,
+        session.organizationId,
+        eq(schema.member.id, body.data.memberId)
+      )
+    )
+    .limit(1);
+
+  if (!targetMember) {
+    return apiError(404, "not_found", "Miembro no encontrado en esta agencia");
+  }
+
+  // Prevenir que el propietario se remueva a sí mismo
+  if (targetMember.role === "owner" || targetMember.userId === session.userId) {
+    return apiError(
+      400,
+      "cannot_remove_owner",
+      "No puedes remover al propietario de la agencia"
+    );
+  }
+
+  // Eliminar membresía
+  await db
+    .delete(schema.member)
+    .where(
+      and(
+        eq(schema.member.id, targetMember.id),
+        eq(schema.member.organizationId, session.organizationId)
+      )
+    );
+
+  return Response.json({ ok: true, removedId: targetMember.id });
 });

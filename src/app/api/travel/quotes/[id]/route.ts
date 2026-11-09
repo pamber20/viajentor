@@ -5,6 +5,7 @@ import {
   getQuote,
   updateQuote,
 } from "@/server/travel/quotes";
+import { publish } from "@/server/events/bus";
 
 export const dynamic = "force-dynamic";
 
@@ -112,6 +113,12 @@ export const DELETE = withConfigAuth(async (session, _req: Request, ctx: RouteCo
   if (!ok) {
     return apiError(404, "not_found", "Cotización no encontrada");
   }
+
+  // Notificar al bus SSE para refrescar vistas conectadas
+  publish(session.organizationId, {
+    type: "conversation.updated",
+    data: { conversation: { quoteId: id, deleted: true } },
+  });
 
   return Response.json({ success: true });
 });
