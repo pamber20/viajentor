@@ -40,7 +40,9 @@ const globalForDb = globalThis as unknown as {
 function createClient() {
   const env = getEnv();
   return postgres(env.DATABASE_URL, {
-    max: 10,
+    max: 25,
+    idle_timeout: 20,
+    connect_timeout: 10,
     ...PG_CONNECTION_OPTIONS,
   });
 }
