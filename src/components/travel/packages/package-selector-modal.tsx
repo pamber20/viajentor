@@ -24,12 +24,17 @@ import {
   extractPackageServices,
   formatCurrency,
 } from "@/lib/travel/pricing";
+import {
+  getActiveFutureDepartures,
+  getLowestDepartureAdultPrice,
+  resolvePackageDepartures,
+} from "@/lib/travel/departures";
 import type { TravelPackageDto } from "@/server/travel/packages";
 
 interface PackageSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (pkg: TravelPackageDto) => void;
+  onSelect: (pkg: TravelPackageDto, departureId?: string) => void;
 }
 
 export function PackageSelectorModal({
@@ -41,6 +46,7 @@ export function PackageSelectorModal({
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterActiveOnly, setFilterActiveOnly] = useState(true);
+  const [pickingPkg, setPickingPkg] = useState<TravelPackageDto | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -165,6 +171,11 @@ export function PackageSelectorModal({
                 // Servicios incluidos mediante detección multifuente
                 const services = extractPackageServices(pkg);
                 const displayDays = calculatePackageDisplayDays(pkg);
+                const allDeps = resolvePackageDepartures(pkg);
+                const activeFutureDeps = getActiveFutureDepartures(allDeps);
+                const lowestPrice = getLowestDepartureAdultPrice(allDeps);
+                const displayPrice = lowestPrice ?? pkg.totals.finalTotal;
+                const hasMultipleDepartures = activeFutureDeps.length > 1;
 
                 return (
                   <div
@@ -206,9 +217,16 @@ export function PackageSelectorModal({
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>
-                            {pkg.startDate} al {pkg.endDate} ({displayDays} días / {pkg.nights} noches)
-                          </span>
+                          {hasMultipleDepartures ? (
+                            <span className="font-semibold text-foreground">
+                              {activeFutureDeps.length} salidas disponibles ({displayDays} días / {pkg.nights} noches)
+                            </span>
+                          ) : (
+                            <span>
+                              {activeFutureDeps[0]?.startDate ?? pkg.startDate} al{" "}
+                              {activeFutureDeps[0]?.endDate ?? pkg.endDate} ({displayDays} días / {pkg.nights} noches)
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -253,30 +271,93 @@ export function PackageSelectorModal({
                     <div className="pt-3 border-t border-border mt-2 flex items-center justify-between gap-3">
                       <div>
                         <div className="text-[10px] text-muted-foreground uppercase font-semibold">
-                          Precio Estimado
+                          {hasMultipleDepartures ? "Desde" : "Precio Estimado"}
                         </div>
                         <div className="text-base font-black text-primary">
-                          {formatCurrency(pkg.totals.finalTotal, pkg.currency)}
+                          {formatCurrency(displayPrice, pkg.currency)}
                         </div>
                         {totalPax > 1 && (
                           <div className="text-[10px] text-muted-foreground">
-                            {formatCurrency(pkg.totals.finalTotal / totalPax, pkg.currency)} / persona
+                            {formatCurrency(displayPrice / totalPax, pkg.currency)} / persona
                           </div>
                         )}
                       </div>
 
                       <Button
                         size="sm"
-                        onClick={() => onSelect(pkg)}
+                        disabled={activeFutureDeps.length === 0}
+                        onClick={() => {
+                          if (activeFutureDeps.length > 1) {
+                            setPickingPkg(pkg);
+                          } else {
+                            onSelect(pkg, activeFutureDeps[0]?.id);
+                          }
+                        }}
                         className="gap-1.5 text-xs font-semibold"
                       >
                         <Check className="h-4 w-4" />
-                        Heredar
+                        {activeFutureDeps.length === 0
+                          ? "Sin salidas vigentes"
+                          : hasMultipleDepartures
+                          ? "Elegir salida"
+                          : "Heredar"}
                       </Button>
                     </div>
                   </div>
                 );
               })}
+            </div>
+          )}
+          {pickingPkg && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+              <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl space-y-4">
+                <div>
+                  <h4 className="text-base font-bold text-foreground">
+                    Elige la salida a heredar
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {pickingPkg.title} · {pickingPkg.destination}
+                  </p>
+                </div>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {getActiveFutureDepartures(resolvePackageDepartures(pickingPkg)).map(
+                    (dep, idx) => (
+                      <button
+                        key={dep.id}
+                        type="button"
+                        onClick={() => {
+                          const target = pickingPkg;
+                          setPickingPkg(null);
+                          onSelect(target, dep.id);
+                        }}
+                        className="w-full flex items-center justify-between gap-3 rounded-xl border border-border bg-background p-3 text-left hover:border-primary hover:bg-primary/5 transition-all"
+                      >
+                        <div>
+                          <div className="text-xs font-bold text-foreground">
+                            Salida {idx + 1}: {dep.startDate} al {dep.endDate}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {dep.nights} noches
+                            {dep.spots !== null && dep.spots !== undefined
+                              ? ` · ${dep.spots} cupos`
+                              : ""}
+                          </div>
+                        </div>
+                        <div className="text-sm font-black text-primary">
+                          {dep.totals
+                            ? formatCurrency(dep.totals.finalTotal, pickingPkg.currency)
+                            : ""}
+                        </div>
+                      </button>
+                    )
+                  )}
+                </div>
+                <div className="flex justify-end">
+                  <Button variant="outline" size="sm" onClick={() => setPickingPkg(null)}>
+                    Volver
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </div>

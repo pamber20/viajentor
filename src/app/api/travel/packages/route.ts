@@ -2,9 +2,25 @@ import { z } from "zod";
 import { apiError, parseBody, withAuth } from "@/lib/api";
 import { createPackage, listPackages } from "@/server/travel/packages";
 
-import type { TravelCurrency, TravelDay } from "@/lib/travel/types";
+import type {
+  TravelCurrency,
+  TravelDay,
+  TravelPackageDeparture,
+} from "@/lib/travel/types";
 
 export const dynamic = "force-dynamic";
+
+const departureSchema = z.object({
+  id: z.string().min(1),
+  startDate: z.string().min(1, "La fecha de salida es obligatoria"),
+  endDate: z.string().min(1, "La fecha de regreso es obligatoria"),
+  nights: z.number().int().min(0).default(0),
+  days: z.array(z.any()).min(1, "Cada salida debe tener al menos un día de itinerario") as z.ZodType<TravelDay[]>,
+  selectedHotelId: z.string().optional().nullable(),
+  amortizationSchedule: z.array(z.any()).optional().nullable(),
+  spots: z.number().int().min(0).optional().nullable(),
+  status: z.enum(["active", "closed"]).default("active"),
+}) as z.ZodType<TravelPackageDeparture>;
 
 const createPackageSchema = z.object({
   title: z.string().trim().min(2, "El título debe tener al menos 2 caracteres"),
@@ -32,6 +48,7 @@ const createPackageSchema = z.object({
   selectedHotelId: z.string().optional().nullable(),
   days: z.array(z.any()).min(1, "Debe tener al menos un día de itinerario") as z.ZodType<TravelDay[]>,
   amortizationSchedule: z.array(z.any()).optional().nullable(),
+  departures: z.array(departureSchema).optional().nullable(),
   inclusions: z.string().optional().nullable(),
   exclusions: z.string().optional().nullable(),
   policies: z.string().optional().nullable(),

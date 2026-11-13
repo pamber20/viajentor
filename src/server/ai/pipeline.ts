@@ -28,6 +28,7 @@ import {
   quedanDebidos,
 } from "@/server/ai/orden-turno";
 import { agendaEnabled } from "@/server/agenda/flag";
+import { resolveDepartureForQuote } from "@/lib/travel/departures";
 import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
 import { getPackage, listPackages } from "@/server/travel/packages";
@@ -583,6 +584,16 @@ async function handleCreateQuoteAction(params: {
       return false;
     }
 
+    const departureResolution = resolveDepartureForQuote(pkg, action.departureId);
+    if (!departureResolution.ok) {
+      console.warn(
+        `[agente] create_quote rechazado para paquete "${action.packageId}": ${departureResolution.reason} (departureId="${action.departureId ?? ""}")`
+      );
+      return false;
+    }
+    const departure = departureResolution.departure;
+    const depTotals = departure.totals ?? pkg.totals;
+
     const db = getDb();
     const contactRows = await db
       .select({
@@ -618,12 +629,12 @@ async function handleCreateQuoteAction(params: {
     );
 
     // Resolver hotel seleccionado (por ID directo o por coincidencia de título)
-    let selectedHotel = action.selectedHotelId || pkg.selectedHotelId || null;
-    if (action.selectedHotelId && pkg.totals?.byHotel) {
-      const matchById = pkg.totals.byHotel.find((h) => h.hotelId === action.selectedHotelId);
+    let selectedHotel = action.selectedHotelId || departure.selectedHotelId || pkg.selectedHotelId || null;
+    if (action.selectedHotelId && depTotals?.byHotel) {
+      const matchById = depTotals.byHotel.find((h) => h.hotelId === action.selectedHotelId);
       if (!matchById) {
         const normSearch = action.selectedHotelId.toLowerCase().trim();
-        const matchByTitle = pkg.totals.byHotel.find((h) =>
+        const matchByTitle = depTotals.byHotel.find((h) =>
           h.hotelTitle.toLowerCase().includes(normSearch)
         );
         if (matchByTitle) {
@@ -635,13 +646,13 @@ async function handleCreateQuoteAction(params: {
     const passengers = Math.max(1, action.passengers ?? pkg.passengers ?? 1);
     const childPassengers = Math.max(0, action.childPassengers ?? pkg.childPassengers ?? 0);
 
-    // Reescalar y filtrar los ítems de los días según los pasajeros reales y el hotel elegido
+    // Reescalar y filtrar los ítems de los días según los pasajeros reales, la salida elegida y el hotel
     const preparedDays = prepareQuoteDaysFromPackage({
-      days: pkg.days ?? [],
+      days: departure.days ?? pkg.days ?? [],
       passengers,
       childPassengers,
       selectedHotelId: selectedHotel,
-      nights: pkg.nights,
+      nights: departure.nights ?? pkg.nights,
     });
 
     const quote = await createQuote({
@@ -655,9 +666,9 @@ async function handleCreateQuoteAction(params: {
       departureAirport: pkg.departureAirport ?? null,
       arrivalAirport: pkg.arrivalAirport ?? null,
       flightType: pkg.flightType ?? "round-trip",
-      startDate: action.startDate || pkg.startDate || null,
-      endDate: action.endDate || pkg.endDate || null,
-      nights: pkg.nights ?? 0,
+      startDate: action.startDate || departure.startDate || pkg.startDate || null,
+      endDate: action.endDate || departure.endDate || pkg.endDate || null,
+      nights: departure.nights ?? pkg.nights ?? 0,
       passengers,
       childPassengers,
       childAges: action.childAges ?? null,
@@ -674,18 +685,18 @@ async function handleCreateQuoteAction(params: {
       freelanceCommission: pkg.freelanceCommission,
       selectedHotelId: selectedHotel,
       days: preparedDays,
-      amortizationSchedule: pkg.amortizationSchedule ?? [],
+      amortizationSchedule: departure.amortizationSchedule ?? pkg.amortizationSchedule ?? [],
       inclusions: pkg.inclusions ?? null,
       exclusions: pkg.exclusions ?? null,
       policies: pkg.policies ?? null,
       pipelineStageId: cotizadoStage?.id ?? null,
       observations: action.observations
-        ? `[Cotizado por Agente IA] Paquete: ${pkg.title}\n${action.observations}`
-        : `[Cotizado por Agente IA] Paquete: ${pkg.title}`,
+        ? `[Cotizado por Agente IA] Paquete: ${pkg.title} (Salida: ${departure.startDate} al ${departure.endDate})\n${action.observations}`
+        : `[Cotizado por Agente IA] Paquete: ${pkg.title} (Salida: ${departure.startDate} al ${departure.endDate})`,
     });
 
     // Registrar en notas del contacto
-    const nota = `Cotización #${quote.quoteNumber} generada por el Asistente IA para el paquete "${pkg.title}" (${passengers} adultos, ${childPassengers} niños).`;
+    const nota = `Cotización #${quote.quoteNumber} generada por el Asistente IA para el paquete "${pkg.title}" (salida ${departure.startDate} al ${departure.endDate}, ${passengers} adultos, ${childPassengers} niños).`;
     await appendLeadNote(organizationId, contactId, nota);
 
     return true;

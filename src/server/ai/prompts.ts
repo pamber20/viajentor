@@ -1,5 +1,9 @@
 import type { schema } from "@/lib/db";
-import { calculatePackageDisplayDays } from "@/lib/travel/pricing";
+import {
+  getActiveFutureDepartures,
+  resolvePackageDepartures,
+} from "@/lib/travel/departures";
+import type { TravelPackageDeparture } from "@/lib/travel/types";
 import type { TravelPackageDto } from "@/server/travel/packages";
 
 type AgentProfile = typeof schema.agentProfile.$inferSelect;
@@ -20,83 +24,124 @@ export function renderKb(entries: KbEntry[]): string {
     .join("\n\n");
 }
 
+function renderDepartureTariffs(
+  pkg: TravelPackageDto,
+  dep: TravelPackageDeparture
+): string {
+  const depTotals = dep.totals ?? pkg.totals;
+  if (depTotals?.byHotel && depTotals.byHotel.length > 0) {
+    return depTotals.byHotel
+      .map((h, i) => {
+        const adultUnit = Math.round(h.totalAdult / (pkg.passengers || 1));
+        const childUnit =
+          pkg.childPassengers > 0 && h.totalChild > 0
+            ? Math.round(h.totalChild / pkg.childPassengers)
+            : null;
+        let precioStr = `Adulto: $${adultUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
+        if (childUnit !== null) {
+          precioStr += ` | Niño: $${childUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
+        }
+        const hotelRef = h.hotelId ? ` [hotelId: "${h.hotelId}"]` : "";
+        return `      • Opción #${i + 1} - ${h.hotelTitle}${hotelRef}: ${precioStr}`;
+      })
+      .join("\n");
+  }
+
+  const adultUnit = Math.round(
+    (depTotals?.totalAdult ?? depTotals?.finalTotal ?? 0) / (pkg.passengers || 1)
+  );
+  const childUnit =
+    pkg.childPassengers > 0 && (depTotals?.totalChild ?? 0) > 0
+      ? Math.round(depTotals.totalChild / pkg.childPassengers)
+      : null;
+  let precioStr = `Adulto: $${adultUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
+  if (childUnit !== null) {
+    precioStr += ` | Niño: $${childUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
+  }
+  return `      • Tarifa Base: ${precioStr}`;
+}
+
 export function renderPackagesCatalog(packages?: TravelPackageDto[]): string | null {
   if (!packages || packages.length === 0) return null;
 
-  const catalogEntries = packages.map((pkg, idx) => {
-    const origin = pkg.originCity
-      ? `${pkg.originCity} (${pkg.departureAirport || "aeropuerto"})`
-      : "Ciudad base";
-    const dest = `${pkg.destination} (${pkg.arrivalAirport || "aeropuerto"})`;
-    const displayDays = calculatePackageDisplayDays(pkg);
-    const duracion = `${displayDays} días / ${pkg.nights} noches`;
-    const fechas = `${pkg.startDate} al ${pkg.endDate} (${duracion})`;
-    const deposito =
-      pkg.minimumDeposit > 0
-        ? `Separa con $${pkg.minimumDeposit.toLocaleString("es-CO")} ${pkg.currency} por persona (abono mes a mes)`
-        : "Abono según políticas de la agencia";
+  const catalogEntries = packages
+    .map((pkg, idx) => {
+      const activeFutureDeps = getActiveFutureDepartures(
+        resolvePackageDepartures(pkg)
+      ).sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
 
-    let hotelTarifas = "";
-    if (pkg.totals?.byHotel && pkg.totals.byHotel.length > 0) {
-      hotelTarifas = pkg.totals.byHotel
-        .map((h, i) => {
-          const adultUnit = Math.round(h.totalAdult / (pkg.passengers || 1));
-          const childUnit =
-            pkg.childPassengers > 0 && h.totalChild > 0
-              ? Math.round(h.totalChild / pkg.childPassengers)
-              : null;
-          let precioStr = `Adulto: $${adultUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
-          if (childUnit !== null) {
-            precioStr += ` | Niño: $${childUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
-          }
-          const hotelRef = h.hotelId ? ` [hotelId: "${h.hotelId}"]` : "";
-          return `    • Opción #${i + 1} - ${h.hotelTitle}${hotelRef}: ${precioStr}`;
+      if (activeFutureDeps.length === 0) return null;
+
+      const origin = pkg.originCity
+        ? `${pkg.originCity} (${pkg.departureAirport || "aeropuerto"})`
+        : "Ciudad base";
+      const dest = `${pkg.destination} (${pkg.arrivalAirport || "aeropuerto"})`;
+      const deposito =
+        pkg.minimumDeposit > 0
+          ? `Separa con $${pkg.minimumDeposit.toLocaleString("es-CO")} ${pkg.currency} por persona (abono mes a mes)`
+          : "Abono según políticas de la agencia";
+
+      const visibleDeps = activeFutureDeps.slice(0, 8);
+      const hiddenCount = activeFutureDeps.length - visibleDeps.length;
+      const departuresBlock = visibleDeps
+        .map((dep, dIdx) => {
+          const depDays =
+            dep.days?.length || (dep.nights ? dep.nights + 1 : 1);
+          const duracion = `${depDays} días / ${dep.nights} noches`;
+          const cuposInfo =
+            dep.spots !== null && dep.spots !== undefined
+              ? ` | Cupos disponibles: ${dep.spots}`
+              : "";
+          const tariffs = renderDepartureTariffs(pkg, dep);
+          return [
+            `    - Salida #${dIdx + 1} [departureId: "${dep.id}"]: ${dep.startDate} al ${dep.endDate} (${duracion})${cuposInfo}`,
+            tariffs,
+          ].join("\n");
         })
         .join("\n");
-    } else {
-      const adultUnit = Math.round(
-        (pkg.totals?.totalAdult ?? pkg.totals?.finalTotal ?? 0) / (pkg.passengers || 1)
-      );
-      const childUnit =
-        pkg.childPassengers > 0 && (pkg.totals?.totalChild ?? 0) > 0
-          ? Math.round(pkg.totals.totalChild / pkg.childPassengers)
+
+      const extraDepsLine =
+        hiddenCount > 0
+          ? `    (+${hiddenCount} salidas adicionales programadas)`
           : null;
-      let precioStr = `Adulto: $${adultUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
-      if (childUnit !== null) {
-        precioStr += ` | Niño: $${childUnit.toLocaleString("es-CO")} ${pkg.currency} c/u`;
-      }
-      hotelTarifas = `    • Tarifa Base: ${precioStr}`;
-    }
 
-    const inc = pkg.inclusions ? `  - Inclusiones: ${pkg.inclusions.replace(/\n+/g, " · ")}` : null;
-    const pol = pkg.policies ? `  - Políticas: ${pkg.policies.replace(/\n+/g, " ")}` : null;
+      const inc = pkg.inclusions
+        ? `  - Inclusiones: ${pkg.inclusions.replace(/\n+/g, " · ")}`
+        : null;
+      const pol = pkg.policies
+        ? `  - Políticas: ${pkg.policies.replace(/\n+/g, " ")}`
+        : null;
 
-    return [
-      `[PAQUETE #${idx + 1}: "${pkg.title}" | packageId: "${pkg.id}"]`,
-      `  - Trayecto: ${origin} ➔ ${dest}`,
-      `  - Fechas: ${fechas}`,
-      `  - Opciones de Hotel y Tarifas Unitarias:`,
-      hotelTarifas,
-      `  - Reserva: ${deposito}`,
-      inc,
-      pol,
-    ]
-      .filter(Boolean)
-      .join("\n");
-  });
+      return [
+        `[PAQUETE #${idx + 1}: "${pkg.title}" | packageId: "${pkg.id}"]`,
+        `  - Trayecto: ${origin} ➔ ${dest}`,
+        `  - Salidas Vigentes (${activeFutureDeps.length}):`,
+        departuresBlock,
+        extraDepsLine,
+        `  - Reserva: ${deposito}`,
+        inc,
+        pol,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .filter((entry): entry is string => Boolean(entry));
+
+  if (catalogEntries.length === 0) return null;
 
   return [
     "CATÁLOGO DE PAQUETES TURÍSTICOS VIGENTES (Fuente para cotizaciones y promociones de viaje):",
     ...catalogEntries,
     "Instrucciones para cotizar paquetes a los clientes:",
-    "- Cuando pregunten por destinos o paquetes, responde amablemente con las fechas, trayecto, inclusiones y las opciones de hotel disponibles.",
-    "- Si el cliente indica cuántos adultos y niños viajan, calcula y entrégale el valor total por cada hotel: (Adultos × Tarifa Adulto) + (Niños × Tarifa Niño).",
+    "- Cuando pregunten por destinos o paquetes, responde amablemente con las salidas vigentes (fechas y cupos si aplica), trayecto, inclusiones y las opciones de hotel con sus tarifas para cada fecha.",
+    "- Si un paquete tiene varias salidas/fechas, presenta las fechas disponibles con su precio correspondiente y pide al cliente confirmar qué fecha de salida prefiere antes de registrar la cotización.",
+    "- Si el cliente indica cuántos adultos y niños viajan, calcula y entrégale el valor total por cada hotel para la salida elegida: (Adultos × Tarifa Adulto) + (Niños × Tarifa Niño).",
     "- Menciona siempre el valor para separar por persona y la facilidad de abonar mes a mes.",
-    "- Anima al cliente a elegir una opción para apartar su cupo y solicitar sus datos de contacto.",
-    "- REGLA ESTRICTA DE COTIZACIÓN EN VIAJENTOR: Solo puedes cotizar y registrar cotizaciones utilizando EXCLUSIVAMENTE los paquetes turísticos vigentes listados arriba.",
-    "- Si el cliente confirma su interés en un paquete vigente y ya se definieron los pasajeros y/o el hotel elegido (ej. 'Rio Republica', 'aparta este plan', etc.), DEBES EMITIR OBLIGATORIAMENTE la acción 'create_quote'.",
-    "- OBLIGATORIO: En el turno en que el cliente elija el hotel o confirme que aparta/cotiza el paquete, ESTÁ PROHIBIDO responder únicamente con 'reply'. Debes usar 'create_quote' con el packageId correspondiente, y colocar tu mensaje de respuesta/confirmación dentro del campo 'reply' de dicha acción.",
-    "- Si el cliente solicita cotizar un destino o servicio que NO está en el catálogo de paquetes vigentes, infórmale con amabilidad que actualmente solo contamos con los paquetes del catálogo vigente o que un asesor humano lo contactará para evaluar opciones personalizadas (usa handoff si insiste). NUNCA uses create_quote sin un packageId válido.",
+    "- Anima al cliente a elegir una salida y opción de hotel para apartar su cupo y solicitar sus datos de contacto.",
+    "- REGLA ESTRICTA DE COTIZACIÓN EN VIAJENTOR: Solo puedes cotizar y registrar cotizaciones utilizando EXCLUSIVAMENTE los paquetes turísticos y salidas vigentes listadas arriba.",
+    "- Si el cliente confirma su interés en un paquete vigente y ya se definieron la fecha de salida (departureId), los pasajeros y/o el hotel elegido (ej. 'Rio Republica', 'aparta este plan', etc.), DEBES EMITIR OBLIGATORIAMENTE la acción 'create_quote'.",
+    "- OBLIGATORIO: En el turno en que el cliente elija el hotel/salida o confirme que aparta/cotiza el paquete (con fecha definida si hay múltiples salidas), ESTÁ PROHIBIDO responder únicamente con 'reply'. Debes usar 'create_quote' con el packageId y departureId correspondientes, y colocar tu mensaje de respuesta/confirmación dentro del campo 'reply' de dicha acción.",
+    "- Si el cliente solicita cotizar un destino, fecha o servicio que NO está en el catálogo de paquetes vigentes, infórmale con amabilidad que actualmente solo contamos con las salidas del catálogo vigente o que un asesor humano lo contactará para evaluar opciones personalizadas (usa handoff si insiste). NUNCA uses create_quote sin un packageId válido.",
   ].join("\n\n");
 }
 
@@ -158,7 +203,7 @@ export function buildAgentSystemPrompt(input: {
       '- {"action":"reply","text":"..."} — responder al cliente.',
       '- {"action":"update_lead","note":"...","reply":"..."} — guardar una nota del lead (si el cliente espera respuesta, incluye reply).',
       '- {"action":"move_stage","stage":"<nombre exacto de etapa>","reply":"..."} — mover el lead (si el cliente espera respuesta, incluye reply).',
-      '- {"action":"create_quote","packageId":"<packageId del paquete vigente>","selectedHotelId":"<opcional: hotelId>","passengers":1,"childPassengers":0,"reply":"..."} — guardar la cotización formal en Viajentor cuando el cliente confirme los datos faltantes (pasajeros, hotel o fechas) de un paquete vigente.',
+      '- {"action":"create_quote","packageId":"<packageId del paquete vigente>","departureId":"<departureId de la salida elegida>","selectedHotelId":"<opcional: hotelId>","passengers":1,"childPassengers":0,"reply":"..."} — guardar la cotización formal en Viajentor cuando el cliente confirme la salida/fecha, pasajeros y hotel de un paquete vigente.',
       '- {"action":"handoff","reason":"...","farewell":"..."} — escalar a un humano (farewell opcional para despedirte).',
       ...agendaLines,
       "Reglas duras:",

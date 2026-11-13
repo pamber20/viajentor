@@ -1,3 +1,5 @@
+import type { DetailedQuoteTotals } from "./pricing";
+
 export type TravelCurrency = "COP" | "USD" | "EUR";
 
 export type TravelItemType =
@@ -106,6 +108,21 @@ export interface TravelInstallment {
   dueDate: string;
   amount: number;
   status: "pending" | "paid" | "partial";
+}
+
+export type DepartureStatus = "active" | "closed";
+
+export interface TravelPackageDeparture {
+  id: string;
+  startDate: string;
+  endDate: string;
+  nights: number;
+  days: TravelDay[];
+  selectedHotelId?: string | null;
+  amortizationSchedule?: TravelInstallment[] | null;
+  spots?: number | null;
+  status: DepartureStatus;
+  totals?: DetailedQuoteTotals;
 }
 
 export interface Traveler {

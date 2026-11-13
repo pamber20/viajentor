@@ -26,6 +26,7 @@ const baseActions = [
   z.object({
     action: z.literal("create_quote"),
     packageId: z.string().min(1),
+    departureId: z.string().optional(),
     selectedHotelId: z.string().optional(),
     passengers: z.number().int().min(1).optional(),
     childPassengers: z.number().int().min(0).optional(),

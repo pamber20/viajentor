@@ -11,7 +11,12 @@ import type {
   TravelCurrency,
   TravelDay,
   TravelInstallment,
+  TravelPackageDeparture,
 } from "@/lib/travel/types";
+import {
+  resolvePackageDepartures,
+  shiftDaysToDeparture,
+} from "@/lib/travel/departures";
 
 export type PackageStatus = "active" | "draft" | "archived";
 
@@ -45,6 +50,7 @@ export interface TravelPackageDto {
   selectedHotelId: string | null;
   days: TravelDay[];
   amortizationSchedule: TravelInstallment[];
+  departures: TravelPackageDeparture[];
   inclusions: string | null;
   exclusions: string | null;
   policies: string | null;
@@ -74,20 +80,51 @@ export function serializePackage(row: PackageRow): TravelPackageDto {
   const passengers = row.passengers ?? 2;
   const childPassengers = row.childPassengers ?? 0;
 
-  const totals = calculateDetailedQuoteTotals({
-    passengers,
-    childPassengers,
-    currency: row.currency ?? "COP",
-    markupPercentage,
-    taxes,
-    agencyCommission,
-    administrativeFee,
-    profitability,
+  const baseDepartures = resolvePackageDepartures({
+    startDate: row.startDate,
+    endDate: row.endDate,
+    nights: row.nights,
     days,
+    selectedHotelId: row.selectedHotelId,
+    amortizationSchedule: (row.amortizationSchedule ?? []) as TravelInstallment[],
+    departures: (row.departures ?? []) as TravelPackageDeparture[],
+    status: row.status,
   });
 
+  const departures: TravelPackageDeparture[] = baseDepartures.map((dep) => ({
+    ...dep,
+    totals: calculateDetailedQuoteTotals({
+      passengers,
+      childPassengers,
+      currency: row.currency ?? "COP",
+      markupPercentage,
+      taxes,
+      agencyCommission,
+      administrativeFee,
+      profitability,
+      days: dep.days,
+    }),
+  }));
+
+  const primaryDep = departures.find((d) => d.status === "active") ?? departures[0];
+  const primaryDays = primaryDep?.days ?? days;
+
+  const totals =
+    primaryDep?.totals ??
+    calculateDetailedQuoteTotals({
+      passengers,
+      childPassengers,
+      currency: row.currency ?? "COP",
+      markupPercentage,
+      taxes,
+      agencyCommission,
+      administrativeFee,
+      profitability,
+      days: primaryDays,
+    });
+
   const services = extractPackageServices({
-    days,
+    days: primaryDays,
     selectedHotelId: row.selectedHotelId,
     medicalAssistance,
     inclusions: row.inclusions,
@@ -119,9 +156,10 @@ export function serializePackage(row: PackageRow): TravelPackageDto {
     medicalAssistance,
     profitability,
     freelanceCommission,
-    selectedHotelId: row.selectedHotelId,
-    days,
+    selectedHotelId: row.selectedHotelId ?? primaryDep?.selectedHotelId ?? null,
+    days: primaryDays,
     amortizationSchedule: (row.amortizationSchedule ?? []) as TravelInstallment[],
+    departures,
     inclusions: row.inclusions,
     exclusions: row.exclusions,
     policies: row.policies,
@@ -158,19 +196,69 @@ export type CreatePackageInput = {
   profitability?: number;
   freelanceCommission?: number;
   selectedHotelId?: string | null;
-  days: TravelDay[];
+  days?: TravelDay[];
   amortizationSchedule?: TravelInstallment[] | null;
+  departures?: TravelPackageDeparture[] | null;
   inclusions?: string | null;
   exclusions?: string | null;
   policies?: string | null;
   status?: PackageStatus;
 };
 
+function newDepartureId(idx = 0): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `dep_${crypto.randomUUID().slice(0, 12)}`;
+  }
+  return `dep_${Date.now()}_${idx + 1}`;
+}
+
+function sanitizeDeparturesForStorage(
+  departures: TravelPackageDeparture[]
+): TravelPackageDeparture[] {
+  return departures.map((dep, idx) => ({
+    id: dep.id?.trim() || newDepartureId(idx),
+    startDate: dep.startDate ?? "",
+    endDate: dep.endDate ?? "",
+    nights: Number(dep.nights ?? 0),
+    days: Array.isArray(dep.days) ? dep.days : [],
+    selectedHotelId: dep.selectedHotelId ?? null,
+    amortizationSchedule: Array.isArray(dep.amortizationSchedule)
+      ? dep.amortizationSchedule
+      : [],
+    spots:
+      dep.spots === null || dep.spots === undefined || dep.spots === ("" as unknown)
+        ? null
+        : Number(dep.spots),
+    status: dep.status === "closed" ? "closed" : "active",
+  }));
+}
+
 export async function createPackage(
   input: CreatePackageInput
 ): Promise<TravelPackageDto> {
   const db = getDb();
   const id = newId("travelPackage");
+
+  const hasExplicitDepartures =
+    Array.isArray(input.departures) && input.departures.length > 0;
+  const normalizedDepartures = sanitizeDeparturesForStorage(
+    hasExplicitDepartures
+      ? input.departures!
+      : [
+          {
+            id: newDepartureId(0),
+            startDate: input.startDate ?? "",
+            endDate: input.endDate ?? "",
+            nights: input.nights ?? 0,
+            days: input.days ?? [],
+            selectedHotelId: input.selectedHotelId ?? null,
+            amortizationSchedule: input.amortizationSchedule ?? [],
+            spots: null,
+            status: "active",
+          },
+        ]
+  );
+  const firstDep = normalizedDepartures[0];
 
   const [row] = await db
     .insert(schema.travelPackage)
@@ -184,9 +272,9 @@ export async function createPackage(
       departureAirport: input.departureAirport?.trim() || null,
       arrivalAirport: input.arrivalAirport?.trim() || null,
       flightType: input.flightType ?? "round-trip",
-      startDate: input.startDate,
-      endDate: input.endDate,
-      nights: input.nights ?? 0,
+      startDate: firstDep?.startDate || input.startDate,
+      endDate: firstDep?.endDate || input.endDate,
+      nights: firstDep?.nights ?? input.nights ?? 0,
       passengers: input.passengers ?? 2,
       childPassengers: input.childPassengers ?? 0,
       currency: input.currency ?? "COP",
@@ -199,9 +287,11 @@ export async function createPackage(
       medicalAssistance: input.medicalAssistance ?? 0,
       profitability: input.profitability ?? 75,
       freelanceCommission: input.freelanceCommission ?? 10,
-      selectedHotelId: input.selectedHotelId ?? null,
-      days: input.days ?? [],
-      amortizationSchedule: input.amortizationSchedule ?? [],
+      selectedHotelId: firstDep?.selectedHotelId ?? input.selectedHotelId ?? null,
+      days: firstDep?.days ?? input.days ?? [],
+      amortizationSchedule:
+        firstDep?.amortizationSchedule ?? input.amortizationSchedule ?? [],
+      departures: normalizedDepartures,
       inclusions: input.inclusions ?? null,
       exclusions: input.exclusions ?? null,
       policies: input.policies ?? null,
@@ -308,6 +398,21 @@ export async function updatePackage(
       ...(patch.selectedHotelId !== undefined ? { selectedHotelId: patch.selectedHotelId } : {}),
       ...(patch.days !== undefined ? { days: patch.days } : {}),
       ...(patch.amortizationSchedule !== undefined ? { amortizationSchedule: patch.amortizationSchedule ?? [] } : {}),
+      ...(patch.departures && patch.departures.length > 0
+        ? (() => {
+            const normalized = sanitizeDeparturesForStorage(patch.departures);
+            const first = normalized[0]!;
+            return {
+              departures: normalized,
+              startDate: first.startDate,
+              endDate: first.endDate,
+              nights: first.nights,
+              days: first.days,
+              selectedHotelId: first.selectedHotelId ?? null,
+              amortizationSchedule: first.amortizationSchedule ?? [],
+            };
+          })()
+        : {}),
       ...(patch.inclusions !== undefined ? { inclusions: patch.inclusions } : {}),
       ...(patch.exclusions !== undefined ? { exclusions: patch.exclusions } : {}),
       ...(patch.policies !== undefined ? { policies: patch.policies } : {}),
@@ -379,6 +484,12 @@ export async function duplicatePackage(
     selectedHotelId: original.selectedHotelId,
     days: original.days,
     amortizationSchedule: original.amortizationSchedule,
+    departures: original.departures.map((dep, idx) => ({
+      ...dep,
+      id: newDepartureId(idx),
+      days: shiftDaysToDeparture({ days: dep.days }),
+      totals: undefined,
+    })),
     inclusions: original.inclusions,
     exclusions: original.exclusions,
     policies: original.policies,

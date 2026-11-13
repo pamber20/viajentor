@@ -34,7 +34,15 @@ import {
   formatCurrency,
   generateAutoInstallments,
 } from "@/lib/travel/pricing";
+import {
+  diffIsoDays,
+  isDeparturePast,
+  resolvePackageDepartures,
+  shiftDaysToDeparture,
+  shiftIsoDate,
+} from "@/lib/travel/departures";
 import type {
+  DepartureStatus,
   FlightDetails,
   HotelDetails,
   TravelCurrency,
@@ -42,6 +50,7 @@ import type {
   TravelInstallment,
   TravelItemType,
   TravelItineraryItem,
+  TravelPackageDeparture,
 } from "@/lib/travel/types";
 import type {
   CreatePackageInput,
@@ -77,6 +86,40 @@ export function PackageBuilder({
   const isEditing = Boolean(initialPackage);
   const { toast } = useToast();
 
+  const initialDepartures: TravelPackageDeparture[] = useMemo(() => {
+    if (initialPackage) {
+      return resolvePackageDepartures(initialPackage);
+    }
+    return [
+      {
+        id: "dep_1",
+        startDate: "",
+        endDate: "",
+        nights: 4,
+        days: [
+          {
+            id: "day_1",
+            dayNumber: 1,
+            items: [],
+          },
+        ],
+        selectedHotelId: null,
+        amortizationSchedule: [],
+        spots: null,
+        status: "active",
+      },
+    ];
+  }, [initialPackage]);
+
+  const firstDeparture = initialDepartures[0];
+
+  const [departures, setDepartures] = useState<TravelPackageDeparture[]>(initialDepartures);
+  const [activeDepartureId, setActiveDepartureId] = useState<string>(firstDeparture?.id ?? "dep_1");
+  const [spots, setSpots] = useState<number | null>(firstDeparture?.spots ?? null);
+  const [departureStatus, setDepartureStatus] = useState<DepartureStatus>(
+    firstDeparture?.status ?? "active"
+  );
+
   // Paso 2: Datos Comerciales, Destinos, Fechas y Pasajeros
   const [title, setTitle] = useState(initialPackage?.title ?? "");
   const [description, setDescription] = useState(initialPackage?.description ?? "");
@@ -88,16 +131,15 @@ export function PackageBuilder({
   const [flightType, setFlightType] = useState<"round-trip" | "one-way">(
     initialPackage?.flightType ?? "round-trip"
   );
-  const [startDate, setStartDate] = useState(initialPackage?.startDate ?? "");
-  const [endDate, setEndDate] = useState(initialPackage?.endDate ?? "");
-  const [nights, setNights] = useState<number>(initialPackage?.nights ?? 4);
+  const [startDate, setStartDate] = useState(firstDeparture?.startDate ?? initialPackage?.startDate ?? "");
+  const [endDate, setEndDate] = useState(firstDeparture?.endDate ?? initialPackage?.endDate ?? "");
+  const [nights, setNights] = useState<number>(firstDeparture?.nights ?? initialPackage?.nights ?? 4);
   const [daysCount, setDaysCount] = useState<number>(
-    initialPackage?.days?.length || (initialPackage?.nights ? initialPackage.nights + 1 : 5)
+    firstDeparture?.days?.length || (firstDeparture?.nights ? firstDeparture.nights + 1 : 5)
   );
   const [passengers, setPassengers] = useState<number>(initialPackage?.passengers ?? 2);
   const [childPassengers, setChildPassengers] = useState<number>(initialPackage?.childPassengers ?? 0);
   const [rooms, setRooms] = useState<number>(1);
-  const [flexibility, setFlexibility] = useState("No");
 
   // Parámetros Financieros (Paso 5)
   const [currency, setCurrency] = useState<TravelCurrency>(initialPackage?.currency ?? "COP");
@@ -108,20 +150,23 @@ export function PackageBuilder({
   const [minimumDeposit, setMinimumDeposit] = useState<number>(initialPackage?.minimumDeposit ?? 0);
   const [profitability, setProfitability] = useState<number>(initialPackage?.profitability ?? 75);
   const [freelanceCommission, setFreelanceCommission] = useState<number>(initialPackage?.freelanceCommission ?? 10);
-  const [selectedHotelId, setSelectedHotelId] = useState<string | null>(initialPackage?.selectedHotelId ?? null);
+  const [selectedHotelId, setSelectedHotelId] = useState<string | null>(
+    firstDeparture?.selectedHotelId ?? initialPackage?.selectedHotelId ?? null
+  );
   const [amortizationSchedule, setAmortizationSchedule] = useState<TravelInstallment[]>(
-    initialPackage?.amortizationSchedule ?? []
+    firstDeparture?.amortizationSchedule ?? initialPackage?.amortizationSchedule ?? []
   );
 
   // Itinerario y Servicios (Paso 4)
   const [days, setDays] = useState<TravelDay[]>(
-    initialPackage?.days ?? [
-      {
-        id: "day_1",
-        dayNumber: 1,
-        items: [],
-      },
-    ]
+    firstDeparture?.days ??
+      initialPackage?.days ?? [
+        {
+          id: "day_1",
+          dayNumber: 1,
+          items: [],
+        },
+      ]
   );
 
   // Cláusulas (Paso 6)
@@ -296,12 +341,125 @@ export function PackageBuilder({
     setArrivalAirport(tempDepAir);
   }
 
+  function snapshotActiveDeparture(list: TravelPackageDeparture[]): TravelPackageDeparture[] {
+    return list.map((dep) =>
+      dep.id === activeDepartureId
+        ? {
+            ...dep,
+            startDate,
+            endDate,
+            nights,
+            days,
+            selectedHotelId,
+            amortizationSchedule,
+            spots,
+            status: departureStatus,
+          }
+        : dep
+    );
+  }
+
+  function loadDepartureIntoEditor(dep: TravelPackageDeparture) {
+    setActiveDepartureId(dep.id);
+    setStartDate(dep.startDate ?? "");
+    setEndDate(dep.endDate ?? "");
+    setNights(dep.nights ?? 0);
+    setDaysCount(dep.days?.length || (dep.nights ? dep.nights + 1 : 1));
+    setDays(
+      dep.days?.length
+        ? dep.days
+        : [{ id: `day_1_${Date.now()}`, dayNumber: 1, items: [] }]
+    );
+    setSelectedHotelId(dep.selectedHotelId ?? null);
+    setAmortizationSchedule(dep.amortizationSchedule ?? []);
+    setSpots(dep.spots ?? null);
+    setDepartureStatus(dep.status ?? "active");
+  }
+
+  function handleSelectDeparture(depId: string) {
+    if (depId === activeDepartureId) return;
+    const updated = snapshotActiveDeparture(departures);
+    setDepartures(updated);
+    const target = updated.find((d) => d.id === depId);
+    if (target) {
+      loadDepartureIntoEditor(target);
+    }
+  }
+
+  function handleAddDeparture(copyFromActive: boolean) {
+    const updated = snapshotActiveDeparture(departures);
+    const newId = `dep_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newDep: TravelPackageDeparture = copyFromActive
+      ? {
+          id: newId,
+          startDate: "",
+          endDate: "",
+          nights,
+          days: shiftDaysToDeparture({
+            days,
+            fromStartDate: startDate,
+            toStartDate: startDate,
+            targetNights: nights,
+          }),
+          selectedHotelId,
+          amortizationSchedule: [],
+          spots,
+          status: "active",
+        }
+      : {
+          id: newId,
+          startDate: "",
+          endDate: "",
+          nights,
+          days: [{ id: `day_1_${Date.now()}`, dayNumber: 1, items: [] }],
+          selectedHotelId: null,
+          amortizationSchedule: [],
+          spots: null,
+          status: "active",
+        };
+    const nextList = [...updated, newDep];
+    setDepartures(nextList);
+    loadDepartureIntoEditor(newDep);
+    toast(
+      copyFromActive
+        ? "Nueva salida creada copiando el itinerario actual. Ajusta sus fechas y precios."
+        : "Nueva salida en blanco creada.",
+      "info"
+    );
+  }
+
+  function handleRemoveDeparture(depId: string) {
+    if (departures.length <= 1) {
+      toast("El paquete debe tener al menos una salida.", "warning");
+      return;
+    }
+    const updated = snapshotActiveDeparture(departures).filter((d) => d.id !== depId);
+    setDepartures(updated);
+    if (depId === activeDepartureId && updated[0]) {
+      loadDepartureIntoEditor(updated[0]);
+    }
+  }
+
   function handleStartDateChange(val: string) {
+    const prevStartDate = startDate;
     setStartDate(val);
     if (!val) return;
+    const deltaDays = diffIsoDays(prevStartDate, val);
+    if (prevStartDate && deltaDays !== 0) {
+      setDays((prev) =>
+        shiftDaysToDeparture({
+          days: prev,
+          fromStartDate: prevStartDate,
+          toStartDate: val,
+        })
+      );
+    }
     let newEndDate = endDate;
     if (flightType !== "one-way") {
-      if (!endDate || endDate < val) {
+      if (prevStartDate && endDate && deltaDays !== 0) {
+        newEndDate = shiftIsoDate(endDate, deltaDays);
+        setEndDate(newEndDate);
+      } else if (!endDate || endDate < val) {
         newEndDate = val;
         setEndDate(val);
       }
@@ -797,10 +955,37 @@ export function PackageBuilder({
       toast("El destino del paquete es obligatorio", "warning");
       return;
     }
-    if (!startDate || !endDate) {
-      toast("Las fechas específicas de ida y vuelta son obligatorias", "warning");
+    const mergedDepartures = snapshotActiveDeparture(departures);
+    const seenRanges = new Set<string>();
+
+    for (let i = 0; i < mergedDepartures.length; i++) {
+      const dep = mergedDepartures[i]!;
+      const label = `Salida ${i + 1}`;
+      if (!dep.startDate || (flightType !== "one-way" && !dep.endDate)) {
+        toast(`${label}: las fechas de salida y regreso son obligatorias`, "warning");
+        handleSelectDeparture(dep.id);
+        return;
+      }
+      if (dep.endDate && dep.startDate && dep.endDate < dep.startDate) {
+        toast(`${label}: la fecha de regreso no puede ser anterior a la fecha de salida`, "warning");
+        handleSelectDeparture(dep.id);
+        return;
+      }
+      const rangeKey = `${dep.startDate}|${dep.endDate}`;
+      if (seenRanges.has(rangeKey)) {
+        toast(`${label}: ya existe otra salida con exactamente las mismas fechas (${dep.startDate} al ${dep.endDate})`, "warning");
+        handleSelectDeparture(dep.id);
+        return;
+      }
+      seenRanges.add(rangeKey);
+    }
+
+    if (status === "active" && !mergedDepartures.some((d) => d.status === "active")) {
+      toast("Un paquete activo debe tener al menos una salida en estado Activa", "warning");
       return;
     }
+
+    const firstDep = mergedDepartures[0]!;
 
     setSaving(true);
     try {
@@ -812,9 +997,9 @@ export function PackageBuilder({
         departureAirport: departureAirport.trim() || null,
         arrivalAirport: arrivalAirport.trim() || null,
         flightType,
-        startDate,
-        endDate,
-        nights,
+        startDate: firstDep.startDate,
+        endDate: firstDep.endDate || firstDep.startDate,
+        nights: firstDep.nights,
         passengers,
         childPassengers,
         currency,
@@ -827,9 +1012,10 @@ export function PackageBuilder({
         medicalAssistance: 0,
         profitability,
         freelanceCommission,
-        selectedHotelId,
-        days,
-        amortizationSchedule,
+        selectedHotelId: firstDep.selectedHotelId ?? null,
+        days: firstDep.days,
+        amortizationSchedule: firstDep.amortizationSchedule ?? [],
+        departures: mergedDepartures,
         inclusions: inclusions.trim() || null,
         exclusions: exclusions.trim() || null,
         policies: policies.trim() || null,
@@ -1211,8 +1397,116 @@ export function PackageBuilder({
                   </div>
                 </div>
 
-                {/* Fechas, Días, Noches, Pasajeros y Moneda */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {/* Salidas del Paquete (Múltiples Fechas) */}
+                <div className="rounded-xl border border-brand/20 bg-brand/5 p-3 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-bold text-text-1">
+                        Salidas programadas ({departures.length})
+                      </p>
+                      <p className="text-[11px] text-text-3">
+                        Cada salida tiene sus propias fechas, cupos, itinerario y tarifas de vuelos, hoteles, traslados, asistencia y actividades.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAddDeparture(true)}
+                        className="h-7 text-[11px] border-brand/30 text-brand hover:bg-brand/10"
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        Nueva salida (copiar actual)
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleAddDeparture(false)}
+                        className="h-7 text-[11px] text-text-2"
+                      >
+                        + En blanco
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {departures.map((dep, idx) => {
+                      const isActive = dep.id === activeDepartureId;
+                      const depStart = isActive ? startDate : dep.startDate;
+                      const depEnd = isActive ? endDate : dep.endDate;
+                      const depStatus = isActive ? departureStatus : dep.status;
+                      const depSpots = isActive ? spots : dep.spots;
+                      const past = isDeparturePast(depStart);
+                      return (
+                        <div
+                          key={dep.id}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-all ${
+                            isActive
+                              ? "border-brand bg-brand text-white shadow-sm"
+                              : "border-border bg-card text-text-1 hover:border-brand/40"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSelectDeparture(dep.id)}
+                            className="flex items-center gap-1.5 text-left font-medium"
+                          >
+                            <span className="font-bold">Salida {idx + 1}</span>
+                            <span className={`text-[11px] ${isActive ? "text-white/90" : "text-text-3"}`}>
+                              {depStart ? `${depStart}${depEnd ? ` → ${depEnd}` : ""}` : "Sin fechas"}
+                            </span>
+                            {depStatus === "closed" && (
+                              <span
+                                className={`rounded px-1 py-0.5 text-[9px] font-bold uppercase ${
+                                  isActive ? "bg-white/20 text-white" : "bg-amber-500/15 text-amber-600"
+                                }`}
+                              >
+                                Cerrada
+                              </span>
+                            )}
+                            {past && (
+                              <span
+                                className={`rounded px-1 py-0.5 text-[9px] font-bold uppercase ${
+                                  isActive ? "bg-white/20 text-white" : "bg-muted text-text-3"
+                                }`}
+                              >
+                                Pasada
+                              </span>
+                            )}
+                            {depSpots !== null && depSpots !== undefined && (
+                              <span
+                                className={`rounded px-1 py-0.5 text-[9px] font-semibold ${
+                                  isActive ? "bg-white/20 text-white" : "bg-emerald-500/10 text-emerald-700"
+                                }`}
+                              >
+                                {depSpots} cupos
+                              </span>
+                            )}
+                          </button>
+                          {departures.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDeparture(dep.id)}
+                              title="Eliminar esta salida"
+                              className={`ml-0.5 rounded p-0.5 transition-colors ${
+                                isActive
+                                  ? "text-white/80 hover:bg-white/20 hover:text-white"
+                                  : "text-text-3 hover:bg-destructive/10 hover:text-destructive"
+                              }`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Fechas, Días, Noches, Cupos y Estado de la Salida Activa */}
+                <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-text-2">Fecha Ida *</label>
                     <Input
@@ -1256,15 +1550,27 @@ export function PackageBuilder({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-text-2">Flexibilidad</label>
+                    <label className="text-xs font-semibold text-text-2">Cupos disponibles</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="Ilimitado"
+                      value={spots === null || spots === undefined ? "" : spots}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setSpots(raw === "" ? null : Math.max(0, Number(raw)));
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-text-2">Estado salida</label>
                     <select
-                      value={flexibility}
-                      onChange={(e) => setFlexibility(e.target.value)}
+                      value={departureStatus}
+                      onChange={(e) => setDepartureStatus(e.target.value as DepartureStatus)}
                       className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-xs font-medium"
                     >
-                      <option value="No">Sin flexibilidad (Fechas fijas)</option>
-                      <option value="+/- 1 día">+/- 1 día</option>
-                      <option value="+/- 3 días">+/- 3 días</option>
+                      <option value="active">Activa</option>
+                      <option value="closed">Cerrada</option>
                     </select>
                   </div>
                 </div>

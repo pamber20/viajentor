@@ -6,11 +6,27 @@ import {
   updatePackage,
 } from "@/server/travel/packages";
 
-import type { TravelCurrency, TravelDay } from "@/lib/travel/types";
+import type {
+  TravelCurrency,
+  TravelDay,
+  TravelPackageDeparture,
+} from "@/lib/travel/types";
 
 export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ id: string }> };
+
+const departureSchema = z.object({
+  id: z.string().min(1),
+  startDate: z.string().min(1),
+  endDate: z.string().min(1),
+  nights: z.number().int().min(0).default(0),
+  days: z.array(z.any()).min(1) as z.ZodType<TravelDay[]>,
+  selectedHotelId: z.string().optional().nullable(),
+  amortizationSchedule: z.array(z.any()).optional().nullable(),
+  spots: z.number().int().min(0).optional().nullable(),
+  status: z.enum(["active", "closed"]).default("active"),
+}) as z.ZodType<TravelPackageDeparture>;
 
 const updatePackageSchema = z.object({
   title: z.string().trim().min(2).optional(),
@@ -38,6 +54,7 @@ const updatePackageSchema = z.object({
   selectedHotelId: z.string().optional().nullable(),
   days: z.array(z.any()).optional() as z.ZodType<TravelDay[] | undefined>,
   amortizationSchedule: z.array(z.any()).optional().nullable(),
+  departures: z.array(departureSchema).optional().nullable(),
   inclusions: z.string().optional().nullable(),
   exclusions: z.string().optional().nullable(),
   policies: z.string().optional().nullable(),

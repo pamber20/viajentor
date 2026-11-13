@@ -31,7 +31,13 @@ import {
   extractPackageServices,
   formatCurrency,
 } from "@/lib/travel/pricing";
+import {
+  getActiveFutureDepartures,
+  getLowestDepartureAdultPrice,
+  resolvePackageDepartures,
+} from "@/lib/travel/departures";
 import { PackageBuilder } from "@/components/travel/packages/package-builder";
+import type { TravelPackageDeparture } from "@/lib/travel/types";
 import type { TravelPackageDto } from "@/server/travel/packages";
 
 export function PackagesClient() {
@@ -53,6 +59,7 @@ export function PackagesClient() {
 
   // Duplicando
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [quoteDepartureModalPkg, setQuoteDepartureModalPkg] = useState<TravelPackageDto | null>(null);
 
   const fetchPackages = useCallback(async () => {
     try {
@@ -135,8 +142,23 @@ export function PackagesClient() {
     }
   };
 
-  const handleQuoteWithPackage = (pkg: TravelPackageDto) => {
-    router.push(`/quotes?packageId=${pkg.id}`);
+  const handleQuoteWithPackage = (pkg: TravelPackageDto, departureId?: string) => {
+    if (departureId) {
+      router.push(`/quotes?packageId=${pkg.id}&departureId=${encodeURIComponent(departureId)}`);
+      return;
+    }
+    const allDeps = resolvePackageDepartures(pkg);
+    const activeFuture = getActiveFutureDepartures(allDeps);
+    if (activeFuture.length > 1) {
+      setQuoteDepartureModalPkg(pkg);
+      return;
+    }
+    const targetDep = activeFuture[0] ?? allDeps[0];
+    if (targetDep?.id) {
+      router.push(`/quotes?packageId=${pkg.id}&departureId=${encodeURIComponent(targetDep.id)}`);
+    } else {
+      router.push(`/quotes?packageId=${pkg.id}`);
+    }
   };
 
   // Si el builder está abierto, lo mostramos a pantalla completa
@@ -340,6 +362,11 @@ export function PackagesClient() {
             // Servicios incluidos mediante detección multifuente
             const services = extractPackageServices(pkg);
             const displayDays = calculatePackageDisplayDays(pkg);
+            const allDeps = resolvePackageDepartures(pkg);
+            const activeFutureDeps = getActiveFutureDepartures(allDeps);
+            const lowestPrice = getLowestDepartureAdultPrice(allDeps);
+            const displayPrice = lowestPrice ?? pkg.totals.finalTotal;
+            const hasMultipleDepartures = activeFutureDeps.length > 1 || allDeps.length > 1;
 
             return (
               <div
@@ -386,15 +413,51 @@ export function PackagesClient() {
 
                   {/* Fechas fijas y pasajeros */}
                   <div className="space-y-1.5 text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg mb-3">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-foreground shrink-0" />
-                      <span className="text-foreground font-medium">
-                        {pkg.startDate} al {pkg.endDate}
-                      </span>
-                      <span className="text-muted-foreground">
-                        ({displayDays} días / {pkg.nights} noches)
-                      </span>
-                    </div>
+                    {hasMultipleDepartures ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 text-foreground font-semibold">
+                            <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
+                            {activeFutureDeps.length > 0
+                              ? `${activeFutureDeps.length} salidas disponibles`
+                              : `${allDeps.length} salidas configuradas`}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            ({displayDays} días / {pkg.nights} noches)
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {(activeFutureDeps.length > 0 ? activeFutureDeps : allDeps)
+                            .slice(0, 3)
+                            .map((dep) => (
+                              <span
+                                key={dep.id}
+                                className="inline-flex items-center rounded bg-background border border-border px-1.5 py-0.5 text-[10px] font-medium text-foreground"
+                              >
+                                {dep.startDate}
+                                {dep.spots !== null && dep.spots !== undefined
+                                  ? ` · ${dep.spots} cupos`
+                                  : ""}
+                              </span>
+                            ))}
+                          {(activeFutureDeps.length > 0 ? activeFutureDeps : allDeps).length > 3 && (
+                            <span className="text-[10px] text-muted-foreground px-1">
+                              +{(activeFutureDeps.length > 0 ? activeFutureDeps : allDeps).length - 3} más
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-foreground shrink-0" />
+                        <span className="text-foreground font-medium">
+                          {pkg.startDate} al {pkg.endDate}
+                        </span>
+                        <span className="text-muted-foreground">
+                          ({displayDays} días / {pkg.nights} noches)
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5">
                       <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <span>
@@ -439,10 +502,10 @@ export function PackagesClient() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-[10px] text-muted-foreground uppercase font-semibold">
-                        Precio Paquete
+                        {hasMultipleDepartures ? "Desde" : "Precio Paquete"}
                       </div>
                       <div className="text-lg font-black text-foreground">
-                        {formatCurrency(pkg.totals.finalTotal, pkg.currency)}
+                        {formatCurrency(displayPrice, pkg.currency)}
                       </div>
                     </div>
                     {totalPax > 1 && (
@@ -451,7 +514,7 @@ export function PackagesClient() {
                           Por Persona
                         </div>
                         <div className="text-xs font-bold text-muted-foreground">
-                          {formatCurrency(pkg.totals.finalTotal / totalPax, pkg.currency)}
+                          {formatCurrency(displayPrice / totalPax, pkg.currency)}
                         </div>
                       </div>
                     )}
@@ -510,6 +573,64 @@ export function PackagesClient() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal para elegir salida al cotizar */}
+      {quoteDepartureModalPkg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl space-y-4">
+            <div>
+              <h3 className="text-base font-bold text-foreground">
+                Selecciona una salida para cotizar
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {quoteDepartureModalPkg.title} · {quoteDepartureModalPkg.destination}
+              </p>
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {getActiveFutureDepartures(resolvePackageDepartures(quoteDepartureModalPkg)).map(
+                (dep: TravelPackageDeparture, idx: number) => (
+                  <button
+                    key={dep.id}
+                    type="button"
+                    onClick={() => {
+                      const target = quoteDepartureModalPkg;
+                      setQuoteDepartureModalPkg(null);
+                      handleQuoteWithPackage(target, dep.id);
+                    }}
+                    className="w-full flex items-center justify-between gap-3 rounded-xl border border-border bg-background p-3 text-left hover:border-primary hover:bg-primary/5 transition-all"
+                  >
+                    <div>
+                      <div className="text-xs font-bold text-foreground">
+                        Salida {idx + 1}: {dep.startDate} al {dep.endDate}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {dep.nights} noches
+                        {dep.spots !== null && dep.spots !== undefined
+                          ? ` · ${dep.spots} cupos`
+                          : ""}
+                      </div>
+                    </div>
+                    <div className="text-sm font-black text-primary">
+                      {dep.totals
+                        ? formatCurrency(dep.totals.finalTotal, quoteDepartureModalPkg.currency)
+                        : ""}
+                    </div>
+                  </button>
+                )
+              )}
+            </div>
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setQuoteDepartureModalPkg(null)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

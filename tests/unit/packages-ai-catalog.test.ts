@@ -31,6 +31,7 @@ describe("Catálogo de Paquetes Turísticos para el Agente de IA", () => {
     selectedHotelId: "hotel_1",
     days: [],
     amortizationSchedule: [],
+    departures: [],
     inclusions: "Tiquetes ida y regreso\nAlojamiento todo incluido\nTraslados aeropuerto-hotel\nAsistencia médica",
     exclusions: "Gastos personales",
     policies: "Separa con $500.000 por persona y abona mes a mes.",

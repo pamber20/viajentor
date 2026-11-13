@@ -10,6 +10,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { TravelPackageDeparture } from "@/lib/travel/types";
 
 /**
  * Tiempo: todas las columnas son `timestamp without time zone` y el marco es
@@ -1490,6 +1491,7 @@ export const travelPackage = pgTable(
     amortizationSchedule: jsonb("amortization_schedule").$type<
       { id: string; code?: string; dueDate: string; amount: number; status: "pending" | "paid" | "partial" }[]
     >(),
+    departures: jsonb("departures").$type<TravelPackageDeparture[]>().notNull().default([]),
     inclusions: text("inclusions"),
     exclusions: text("exclusions"),
     policies: text("policies"),

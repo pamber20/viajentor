@@ -53,7 +53,9 @@ export function QuotesClient({
 }) {
   const searchParams = useSearchParams();
   const packageIdParam = searchParams?.get("packageId") ?? null;
+  const departureIdParam = searchParams?.get("departureId") ?? null;
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(packageIdParam);
+  const [selectedDepartureId, setSelectedDepartureId] = useState<string | null>(departureIdParam);
 
   const [quotes, setQuotes] = useState<TravelQuoteDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,6 +137,7 @@ export function QuotesClient({
       <QuoteBuilder
         initialQuote={editingQuote}
         initialPackageId={selectedPackageId}
+        initialDepartureId={selectedDepartureId}
         contactId={contactId}
         leadId={leadId}
         layoutMode="workspace"
@@ -142,6 +145,7 @@ export function QuotesClient({
           setBuilderOpen(false);
           setEditingQuote(null);
           setSelectedPackageId(null);
+          setSelectedDepartureId(null);
         }}
         onSaved={(saved) => {
           setQuotes((prev) => {

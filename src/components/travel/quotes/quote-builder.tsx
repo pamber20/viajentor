@@ -47,6 +47,10 @@ import { SupplierCombobox } from "@/components/travel/suppliers/supplier-combobo
 import { CITY_AIRPORT_MAP } from "@/hooks/useAirlines";
 import type { TravelQuoteDto } from "@/server/travel/quotes";
 import type { TravelPackageDto } from "@/server/travel/packages";
+import {
+  getActiveFutureDepartures,
+  resolvePackageDepartures,
+} from "@/lib/travel/departures";
 import { PackageSelectorModal } from "@/components/travel/packages/package-selector-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
@@ -135,6 +139,7 @@ export function mapItemTypeToSupplier(type: string): TravelSupplierType {
 export function QuoteBuilder({
   initialQuote,
   initialPackageId,
+  initialDepartureId,
   contactId,
   leadId,
   clientName: initialClientName,
@@ -145,6 +150,7 @@ export function QuoteBuilder({
 }: {
   initialQuote?: TravelQuoteDto | null;
   initialPackageId?: string | null;
+  initialDepartureId?: string | null;
   contactId?: string | null;
   leadId?: string | null;
   clientName?: string | null;
@@ -263,17 +269,34 @@ export function QuoteBuilder({
   const [packageDescription, setPackageDescription] = useState("");
   const [savingAsPackage, setSavingAsPackage] = useState(false);
 
-  function applyPackage(pkg: TravelPackageDto) {
+  function applyPackage(pkg: TravelPackageDto, departureId?: string | null) {
+    const allDeps = resolvePackageDepartures(pkg);
+    const activeFuture = getActiveFutureDepartures(allDeps);
+    const chosenDep =
+      (departureId ? allDeps.find((d) => d.id === departureId) : undefined) ??
+      activeFuture[0] ??
+      allDeps[0];
+
+    const depStartDate = chosenDep?.startDate || pkg.startDate;
+    const depEndDate = chosenDep?.endDate || pkg.endDate;
+    const depNights = chosenDep?.nights ?? pkg.nights;
+    const depDays = chosenDep?.days?.length ? chosenDep.days : pkg.days;
+    const depSelectedHotelId = chosenDep?.selectedHotelId ?? pkg.selectedHotelId;
+    const depAmortization =
+      chosenDep?.amortizationSchedule && chosenDep.amortizationSchedule.length > 0
+        ? chosenDep.amortizationSchedule
+        : pkg.amortizationSchedule;
+
     if (pkg.originCity) setOriginCity(pkg.originCity);
     if (pkg.departureAirport) setDepartureAirport(pkg.departureAirport);
     if (pkg.destination) setDestination(pkg.destination);
     if (pkg.arrivalAirport) setArrivalAirport(pkg.arrivalAirport);
     if (pkg.flightType) setFlightType(pkg.flightType);
-    if (pkg.startDate) setStartDate(pkg.startDate);
-    if (pkg.endDate) setEndDate(pkg.endDate);
-    if (pkg.nights) {
-      setNights(pkg.nights);
-      setDaysCount(pkg.days?.length || (pkg.nights ? pkg.nights + 1 : 1));
+    if (depStartDate) setStartDate(depStartDate);
+    if (depEndDate) setEndDate(depEndDate);
+    if (depNights) {
+      setNights(depNights);
+      setDaysCount(depDays?.length || (depNights ? depNights + 1 : 1));
     }
     if (pkg.passengers) setPassengers(pkg.passengers);
     if (pkg.childPassengers !== undefined) setChildPassengers(pkg.childPassengers);
@@ -285,9 +308,9 @@ export function QuoteBuilder({
     if (pkg.profitability !== undefined) setProfitability(pkg.profitability);
     if (pkg.minimumDeposit !== undefined) setMinimumDeposit(pkg.minimumDeposit);
     if (pkg.freelanceCommission !== undefined) setFreelanceCommission(pkg.freelanceCommission);
-    if (pkg.selectedHotelId) setSelectedHotelId(pkg.selectedHotelId);
-    if (pkg.days && pkg.days.length > 0) setDays(pkg.days);
-    if (pkg.amortizationSchedule && pkg.amortizationSchedule.length > 0) setAmortizationSchedule(pkg.amortizationSchedule);
+    if (depSelectedHotelId) setSelectedHotelId(depSelectedHotelId);
+    if (depDays && depDays.length > 0) setDays(depDays);
+    if (depAmortization && depAmortization.length > 0) setAmortizationSchedule(depAmortization);
     if (pkg.inclusions) setInclusions(pkg.inclusions);
     if (pkg.exclusions) setExclusions(pkg.exclusions);
     if (pkg.policies) setPolicies(pkg.policies);
@@ -303,7 +326,7 @@ export function QuoteBuilder({
         const data = await res.json();
         const pkg = (data.package ?? data) as TravelPackageDto;
         if (pkg && (pkg.destination || pkg.title)) {
-          applyPackage(pkg);
+          applyPackage(pkg, initialDepartureId);
         }
       } catch (err) {
         console.error("Error al cargar paquete inicial", err);
@@ -311,7 +334,7 @@ export function QuoteBuilder({
     }
     void loadPackage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPackageId]);
+  }, [initialPackageId, initialDepartureId]);
 
   // Cargar etapas del Pipeline
   useEffect(() => {
@@ -2963,8 +2986,8 @@ export function QuoteBuilder({
       <PackageSelectorModal
         isOpen={packageSelectorOpen}
         onClose={() => setPackageSelectorOpen(false)}
-        onSelect={(pkg) => {
-          applyPackage(pkg);
+        onSelect={(pkg, departureId) => {
+          applyPackage(pkg, departureId);
           setPackageSelectorOpen(false);
         }}
       />
